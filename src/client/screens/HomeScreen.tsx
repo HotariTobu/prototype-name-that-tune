@@ -1,24 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 interface Props {
   navigate: (path: string) => void;
   createRoom: () => Promise<{ ok: true; code: string } | { ok: false; error: string }>;
   checkRoom: (code: string) => Promise<{ exists: boolean }>;
-  musicKit: {
-    credentialsConfigured: boolean;
-    checkCredentials: () => Promise<boolean>;
-  };
 }
 
-export function HomeScreen({ navigate, createRoom, checkRoom, musicKit }: Props) {
+export function HomeScreen({ navigate, createRoom, checkRoom }: Props) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [code, setCode] = useState("");
   const [checking, setChecking] = useState(false);
-
-  useEffect(() => {
-    musicKit.checkCredentials();
-  }, []);
 
   const handleCreate = async () => {
     setLoading(true);
@@ -70,12 +62,6 @@ export function HomeScreen({ navigate, createRoom, checkRoom, musicKit }: Props)
         className="bg-blue-600 text-white px-8 py-3 rounded text-lg disabled:opacity-50"
       >
         {loading ? "Creating..." : "Create Room"}
-      </button>
-      <button
-        onClick={() => navigate("/setup")}
-        className="text-sm text-gray-400 underline"
-      >
-        {musicKit.credentialsConfigured ? "Apple Music configured" : "Configure Apple Music"}
       </button>
     </div>
   );

@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from "react";
 
 type Route =
   | { path: "/"; params: {} }
-  | { path: "/setup"; params: {} }
   | { path: "/room/:code"; params: { code: string } };
 
 function matchRoute(pathname: string): Route {
@@ -10,11 +9,6 @@ function matchRoute(pathname: string): Route {
   const roomMatch = pathname.match(/^\/room\/([A-Za-z0-9]+)$/);
   if (roomMatch) {
     return { path: "/room/:code", params: { code: roomMatch[1]! } };
-  }
-
-  // /setup
-  if (pathname === "/setup") {
-    return { path: "/setup", params: {} };
   }
 
   // / (default)

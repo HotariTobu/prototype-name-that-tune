@@ -3,7 +3,6 @@ import { useRouter } from "./client/hooks/useRouter.ts";
 import { useSocket } from "./client/hooks/useSocket.ts";
 import { useMusicKit } from "./client/hooks/useMusicKit.ts";
 import { HomeScreen } from "./client/screens/HomeScreen.tsx";
-import { SetupScreen } from "./client/screens/SetupScreen.tsx";
 import { RoomScreen } from "./client/screens/RoomScreen.tsx";
 
 export function App() {
@@ -24,9 +23,6 @@ export function App() {
   }
 
   switch (route.path) {
-    case "/setup":
-      return <SetupScreen navigate={navigate} musicKit={musicKit} />;
-
     case "/room/:code":
       return (
         <RoomScreen
@@ -44,7 +40,6 @@ export function App() {
           navigate={navigate}
           createRoom={socket.createRoom}
           checkRoom={socket.checkRoom}
-          musicKit={musicKit}
         />
       );
   }

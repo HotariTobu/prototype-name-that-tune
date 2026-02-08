@@ -1,30 +1,16 @@
 import { SignJWT, importPKCS8 } from "jose";
 
-export interface AppleCredentials {
-  teamId: string;
-  keyId: string;
-  privateKey: string;
-}
-
-let storedCredentials: AppleCredentials | null = null;
-
-export function setCredentials(credentials: AppleCredentials): void {
-  storedCredentials = credentials;
-}
+const teamId = process.env.APPLE_TEAM_ID ?? "";
+const keyId = process.env.APPLE_KEY_ID ?? "";
+const privateKey = (process.env.APPLE_PRIVATE_KEY ?? "").replace(/\\n/g, "\n");
 
 export function hasCredentials(): boolean {
-  return storedCredentials !== null;
-}
-
-export function getCredentials(): AppleCredentials | null {
-  return storedCredentials;
+  return !!(teamId && keyId && privateKey);
 }
 
 export async function generateToken(
-  credentials: AppleCredentials,
   expiresIn: number
 ): Promise<{ token: string; expiresAt: Date }> {
-  const { teamId, keyId, privateKey } = credentials;
   const now = Math.floor(Date.now() / 1000);
   const exp = now + expiresIn;
 

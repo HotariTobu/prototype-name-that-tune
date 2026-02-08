@@ -11,39 +11,9 @@ async function fetchToken(): Promise<{ token: string; expiresAt: Date }> {
 export function useMusicKit() {
   const [configured, setConfigured] = useState(false);
   const [authorized, setAuthorized] = useState(false);
-  const [credentialsConfigured, setCredentialsConfigured] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const musicRef = useRef<MusicKit.MusicKitInstance | null>(null);
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const checkCredentials = useCallback(async () => {
-    try {
-      const res = await fetch("/api/credentials");
-      const data = await res.json();
-      setCredentialsConfigured(data.configured);
-      return data.configured as boolean;
-    } catch {
-      return false;
-    }
-  }, []);
-
-  const saveCredentials = useCallback(async (teamId: string, keyId: string, privateKey: string) => {
-    setError(null);
-    try {
-      const res = await fetch("/api/credentials", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teamId, keyId, privateKey }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setCredentialsConfigured(true);
-      return true;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save credentials");
-      return false;
-    }
-  }, []);
 
   const configure = useCallback(async () => {
     setError(null);
@@ -274,10 +244,7 @@ export function useMusicKit() {
   return {
     configured,
     authorized,
-    credentialsConfigured,
     error,
-    checkCredentials,
-    saveCredentials,
     configure,
     authorize,
     unauthorize,
