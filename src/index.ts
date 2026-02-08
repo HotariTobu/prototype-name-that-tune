@@ -1,8 +1,20 @@
+import { networkInterfaces } from "node:os";
+import { serve } from "bun";
 import { Server as Engine } from "@socket.io/bun-engine";
 import { Server } from "socket.io";
 import { registerHandlers } from "./server/socket.ts";
 import { hasCredentials, generateToken } from "./server/token.ts";
 import index from "./index.html";
+
+function getLocalIPAddresses(): string[] {
+  return Object.values(networkInterfaces())
+    .flat()
+    .filter(
+      (addr): addr is NonNullable<typeof addr> =>
+        addr !== undefined && addr.family === "IPv4" && !addr.internal,
+    )
+    .map((addr) => addr.address);
+}
 
 const engine = new Engine({ path: "/socket.io/" });
 
@@ -12,7 +24,7 @@ registerHandlers(io);
 
 const { fetch: engineFetch, websocket } = engine.handler();
 
-export default {
+const server = serve({
   port: Number(process.env.PORT) || 3000,
   idleTimeout: 30,
   routes: {
@@ -45,4 +57,11 @@ export default {
     hmr: true,
     console: true,
   },
-};
+});
+
+const { port } = server;
+console.log(`🚀 Server running at`);
+console.log(`   Local:   http://localhost:${port}`);
+for (const ip of getLocalIPAddresses()) {
+  console.log(`   Network: http://${ip}:${port}`);
+}
