@@ -16,7 +16,11 @@ function getLocalIPAddresses(): string[] {
     .map((addr) => addr.address);
 }
 
-const engine = new Engine({ path: "/socket.io/" });
+const engine = new Engine({
+  path: "/socket.io/",
+  pingInterval: 25000,
+  pingTimeout: 20000,
+});
 
 const io = new Server();
 io.bind(engine);
@@ -26,7 +30,7 @@ const { fetch: engineFetch, websocket } = engine.handler();
 
 const server = serve({
   port: Number(process.env.PORT) || 3000,
-  idleTimeout: 30,
+  idleTimeout: 60,
   routes: {
     "/*": index,
 
