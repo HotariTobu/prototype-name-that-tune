@@ -50,7 +50,7 @@ export function createRoom(hostSocketId: string, sessionId: string): RoomState {
   const room: RoomState = {
     code,
     phase: "lobby",
-    players: [{ id: hostSocketId, nickname, score: 0, isHost: true }],
+    players: [{ id: hostSocketId, nickname, score: 0, isHost: true, handicapSeconds: 0 }],
     settings: { ...DEFAULT_SETTINGS },
     round: null,
   };
@@ -73,7 +73,7 @@ export function joinRoom(code: string, socketId: string, sessionId: string): Roo
   if (room.players.length >= 20) return "Room is full";
 
   const nickname = assignNickname(code, sessionId);
-  room.players.push({ id: socketId, nickname, score: 0, isHost: false });
+  room.players.push({ id: socketId, nickname, score: 0, isHost: false, handicapSeconds: 0 });
   socketToRoom.set(socketId, code);
   socketToSession.set(socketId, sessionId);
   return room;
@@ -158,4 +158,15 @@ export function updateSettings(code: string, settings: Partial<RoomSettings>): R
 
 export function isHost(socketId: string, room: RoomState): boolean {
   return room.players.some((p) => p.id === socketId && p.isHost);
+}
+
+export function setHandicap(code: string, socketId: string, seconds: number): RoomState | string {
+  const room = rooms.get(code);
+  if (!room) return "Room not found";
+  if (room.phase !== "lobby") return "Can only change handicap in lobby";
+  const player = room.players.find((p) => p.id === socketId);
+  if (!player) return "Not in room";
+  if (typeof seconds !== "number" || isNaN(seconds) || seconds < 0 || seconds > 30) return "Handicap must be between 0 and 30 seconds";
+  player.handicapSeconds = seconds;
+  return room;
 }

@@ -19,6 +19,7 @@ interface Props {
     joinRoom: (code: string) => Promise<{ ok: true } | { ok: false; error: string }>;
     leaveRoom: () => void;
     setNickname: (nickname: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+    setHandicap: (seconds: number) => Promise<{ ok: true } | { ok: false; error: string }>;
     updateSettings: (settings: any) => void;
     sendLobbySongs: (songs: Song[]) => void;
     startGame: (songs: Song[]) => void;
@@ -32,6 +33,7 @@ interface Props {
     wrongAnswer: string | null;
     songs: Song[];
     lobbySongs: Song[];
+    answerPending: { songTitle: string; submittedAt: number } | null;
   };
   isHost: boolean;
   musicKit: any;
@@ -142,6 +144,7 @@ export function RoomScreen({ roomCode, navigate, socket, isHost, musicKit }: Pro
         onEnd={socket.endGame}
         onLeave={() => navigate("/")}
         wrongAnswer={socket.wrongAnswer}
+        answerPending={socket.answerPending}
         musicKit={musicKit}
         songs={socket.songs}
       />
@@ -155,6 +158,7 @@ export function RoomScreen({ roomCode, navigate, socket, isHost, musicKit }: Pro
       isHost={isHost}
       mySocketId={socket.socket?.id}
       onSetNickname={socket.setNickname}
+      onSetHandicap={socket.setHandicap}
       onUpdateSettings={socket.updateSettings}
       onSendLobbySongs={socket.sendLobbySongs}
       onStart={handleStart}

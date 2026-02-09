@@ -3,6 +3,48 @@ import type { RoomState, Song, RoundState } from "../shared/types.ts";
 let roomSongs = new Map<string, Song[]>();
 let lobbySongs = new Map<string, Song[]>();
 
+interface PendingAnswer {
+  timerId: ReturnType<typeof setTimeout>;
+  socketId: string;
+  songId: string;
+  songTitle: string;
+  roomCode: string;
+  roundNumber: number;
+}
+
+const pendingAnswers = new Map<string, Map<string, PendingAnswer>>();
+
+export function addPendingAnswer(roomCode: string, socketId: string, pending: PendingAnswer): void {
+  cancelPendingAnswer(roomCode, socketId);
+  if (!pendingAnswers.has(roomCode)) {
+    pendingAnswers.set(roomCode, new Map());
+  }
+  pendingAnswers.get(roomCode)!.set(socketId, pending);
+}
+
+export function cancelPendingAnswer(roomCode: string, socketId: string): boolean {
+  const roomPending = pendingAnswers.get(roomCode);
+  if (!roomPending) return false;
+  const pending = roomPending.get(socketId);
+  if (!pending) return false;
+  clearTimeout(pending.timerId);
+  roomPending.delete(socketId);
+  if (roomPending.size === 0) pendingAnswers.delete(roomCode);
+  return true;
+}
+
+export function cancelAllPendingAnswers(roomCode: string): string[] {
+  const roomPending = pendingAnswers.get(roomCode);
+  if (!roomPending) return [];
+  const cancelledSocketIds: string[] = [];
+  for (const [socketId, pending] of roomPending) {
+    clearTimeout(pending.timerId);
+    cancelledSocketIds.push(socketId);
+  }
+  pendingAnswers.delete(roomCode);
+  return cancelledSocketIds;
+}
+
 export function setLobbySongs(roomCode: string, songs: Song[]): void {
   lobbySongs.set(roomCode, songs);
 }
@@ -19,6 +61,7 @@ export function startGame(room: RoomState, songs: Song[]): RoundState {
 }
 
 export function startRound(room: RoomState, roundNumber: number): RoundState {
+  cancelAllPendingAnswers(room.code);
   const round: RoundState = {
     roundNumber,
     currentStepIndex: 0,
@@ -83,6 +126,7 @@ export function canAdvanceRound(room: RoomState): boolean {
 
 export function endGame(room: RoomState): void {
   room.phase = "finished";
+  cancelAllPendingAnswers(room.code);
   roomSongs.delete(room.code);
   lobbySongs.delete(room.code);
 }
@@ -91,6 +135,7 @@ export function resetToLobby(room: RoomState): void {
   room.phase = "lobby";
   room.round = null;
   room.players.forEach((p) => (p.score = 0));
+  cancelAllPendingAnswers(room.code);
   roomSongs.delete(room.code);
   lobbySongs.delete(room.code);
 }

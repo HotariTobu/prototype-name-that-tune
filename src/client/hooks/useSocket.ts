@@ -25,6 +25,7 @@ export function useSocket() {
   const [wrongAnswer, setWrongAnswer] = useState<string | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [lobbySongs, setLobbySongs] = useState<Song[]>([]);
+  const [answerPending, setAnswerPending] = useState<{ songTitle: string; submittedAt: number } | null>(null);
 
   useEffect(() => {
     const socket: AppSocket = io({ transports: ["websocket"] });
@@ -51,10 +52,20 @@ export function useSocket() {
       setReveal(null);
       setPlaySong(null);
       setWrongAnswer(null);
+      setAnswerPending(null);
     });
-    socket.on("game:reveal", (data) => setReveal(data));
+    socket.on("game:reveal", (data) => {
+      setReveal(data);
+      setAnswerPending(null);
+    });
+    socket.on("game:extended", (data) => {
+      setRound((prev) => prev ? { ...prev, currentStepIndex: data.currentStepIndex } : prev);
+    });
     socket.on("game:play-song", (data) => setPlaySong(data));
-    socket.on("game:wrong-answer", (data) => setWrongAnswer(data.songTitle));
+    socket.on("game:wrong-answer", (data) => {
+      setWrongAnswer(data.songTitle);
+      setAnswerPending(null);
+    });
     socket.on("game:finished", (data) => setFinished(data.players));
 
     return () => {
@@ -90,11 +101,18 @@ export function useSocket() {
     setLobbySongs([]);
     setPlaySong(null);
     setWrongAnswer(null);
+    setAnswerPending(null);
   }, []);
 
   const setNickname = useCallback((nickname: string): Promise<{ ok: true } | { ok: false; error: string }> => {
     return new Promise((resolve) => {
       socketRef.current?.emit("room:nickname", { nickname }, resolve);
+    });
+  }, []);
+
+  const setHandicap = useCallback((seconds: number): Promise<{ ok: true } | { ok: false; error: string }> => {
+    return new Promise((resolve) => {
+      socketRef.current?.emit("room:handicap", { seconds }, resolve);
     });
   }, []);
 
@@ -116,7 +134,11 @@ export function useSocket() {
 
   const answer = useCallback((songId: string, songTitle: string) => {
     socketRef.current?.emit("game:answer", { songId, songTitle });
-  }, []);
+    const myPlayer = roomState?.players.find((p) => p.id === socketRef.current?.id);
+    if (myPlayer && myPlayer.handicapSeconds > 0) {
+      setAnswerPending({ songTitle, submittedAt: Date.now() });
+    }
+  }, [roomState]);
 
   const extend = useCallback(() => {
     socketRef.current?.emit("game:extend");
@@ -154,6 +176,7 @@ export function useSocket() {
     joinRoom,
     leaveRoom,
     setNickname,
+    setHandicap,
     updateSettings,
     sendLobbySongs,
     startGame,
@@ -164,5 +187,6 @@ export function useSocket() {
     next,
     endGame,
     backToLobby,
+    answerPending,
   };
 }

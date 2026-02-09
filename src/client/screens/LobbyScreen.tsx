@@ -6,6 +6,7 @@ interface Props {
   isHost: boolean;
   mySocketId: string | undefined;
   onSetNickname: (nickname: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  onSetHandicap: (seconds: number) => Promise<{ ok: true } | { ok: false; error: string }>;
   onUpdateSettings: (settings: any) => void;
   onSendLobbySongs: (songs: Song[]) => void;
   onStart: (songs: Song[]) => void;
@@ -25,7 +26,7 @@ interface Props {
   lobbySongs: Song[];
 }
 
-export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onUpdateSettings, onSendLobbySongs, onStart, onLeave, musicKit, lobbySongs }: Props) {
+export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHandicap, onUpdateSettings, onSendLobbySongs, onStart, onLeave, musicKit, lobbySongs }: Props) {
   const myPlayer = room.players.find((p) => p.id === mySocketId);
   const [nickname, setNickname] = useState(myPlayer?.nickname ?? "");
   const [nicknameError, setNicknameError] = useState("");
@@ -33,6 +34,7 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onUpdateS
   const [unlimited, setUnlimited] = useState(room.settings.totalRounds === 0);
   const [rounds, setRounds] = useState(room.settings.totalRounds || 10);
   const [durationStepsInput, setDurationStepsInput] = useState(room.settings.durationSteps.join(", "));
+  const [handicap, setHandicap] = useState(myPlayer?.handicapSeconds ?? 0);
 
   // Playlist dialog state
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -111,7 +113,7 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onUpdateS
 
   function extractPlaylistId(url: string): string | null {
     const match = url.match(/(pl\.[a-zA-Z0-9_-]+)/);
-    return match ? match[1] : null;
+    return match ? match[1]! : null;
   }
 
   const handleUrlSubmit = async () => {
@@ -193,12 +195,43 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onUpdateS
         {nicknameError && <p className="text-red-500 text-sm mt-1">{nicknameError}</p>}
       </div>
 
+      <div className="bg-white border rounded p-4 w-full max-w-md">
+        <h2 className="font-bold mb-2">Handicap Delay</h2>
+        <p className="text-gray-500 text-sm mb-2">
+          Add a delay before your answers are processed.
+        </p>
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={0}
+            max={30}
+            step={0.1}
+            value={handicap}
+            onChange={(e) => setHandicap(Number(e.target.value))}
+            className="flex-1"
+          />
+          <span className="font-mono w-10 text-center">{handicap}s</span>
+          <button
+            onClick={() => onSetHandicap(handicap)}
+            disabled={handicap === (myPlayer?.handicapSeconds ?? 0)}
+            className="bg-blue-600 text-white px-3 py-1 rounded text-sm disabled:opacity-50"
+          >
+            Set
+          </button>
+        </div>
+      </div>
+
       <div className="bg-gray-100 rounded p-4 w-full max-w-md">
         <h2 className="font-bold mb-2">Players ({room.players.length})</h2>
         <ul className="space-y-1">
           {room.players.map((p) => (
             <li key={p.id} className="flex justify-between">
-              <span className={p.nickname ? "" : "text-gray-400 italic"}>{p.nickname || "No name yet"}</span>
+              <span className={p.nickname ? "" : "text-gray-400 italic"}>
+                {p.nickname || "No name yet"}
+                {p.handicapSeconds > 0 && (
+                  <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">+{p.handicapSeconds}s</span>
+                )}
+              </span>
               {p.isHost && <span className="text-xs bg-yellow-200 px-2 py-0.5 rounded">Host</span>}
             </li>
           ))}

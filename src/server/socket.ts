@@ -1,7 +1,7 @@
 import type { Server, Socket } from "socket.io";
 import type { ClientToServerEvents, ServerToClientEvents } from "../shared/types.ts";
-import { createRoom, joinRoom, leaveRoom, getRoom, getRoomBySocket, updateSettings, isHost, setNickname, saveGameParticipants, isGameParticipant } from "./rooms.ts";
-import { startGame, submitAnswer, extendDuration, canAdvanceRound, startRound, getSongForRound, endGame, resetToLobby, getRoomSongs, setLobbySongs, getLobbySongs } from "./game.ts";
+import { createRoom, joinRoom, leaveRoom, getRoom, getRoomBySocket, updateSettings, isHost, setNickname, setHandicap, saveGameParticipants, isGameParticipant } from "./rooms.ts";
+import { startGame, submitAnswer, extendDuration, canAdvanceRound, startRound, getSongForRound, endGame, resetToLobby, getRoomSongs, setLobbySongs, getLobbySongs, addPendingAnswer, cancelPendingAnswer, cancelAllPendingAnswers } from "./game.ts";
 
 type IO = Server<ClientToServerEvents, ServerToClientEvents>;
 type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -82,6 +82,21 @@ export function registerHandlers(io: IO) {
       io.to(result.code).emit("room:state", result);
     });
 
+    socket.on("room:handicap", ({ seconds }, cb) => {
+      const room = getRoomBySocket(socket.id);
+      if (!room) {
+        cb({ ok: false, error: "Not in a room" });
+        return;
+      }
+      const result = setHandicap(room.code, socket.id, seconds);
+      if (typeof result === "string") {
+        cb({ ok: false, error: result });
+        return;
+      }
+      cb({ ok: true });
+      io.to(result.code).emit("room:state", result);
+    });
+
     socket.on("lobby:songs", ({ songs }) => {
       const room = getRoomBySocket(socket.id);
       if (!room || !isHost(socket.id, room) || room.phase !== "lobby") return;
@@ -121,19 +136,41 @@ export function registerHandlers(io: IO) {
     socket.on("game:answer", ({ songId, songTitle }) => {
       const room = getRoomBySocket(socket.id);
       if (!room || !room.round) return;
-      const { correct, alreadyWon } = submitAnswer(room, socket.id, songId, songTitle);
-      if (correct) {
-        const song = getSongForRound(room.code, room.round.roundNumber);
-        const winner = room.players.find((p) => p.id === socket.id);
-        io.to(room.code).emit("game:reveal", {
-          song: song!,
-          winnerId: socket.id,
-          winnerNickname: winner?.nickname ?? null,
-        });
-        io.to(room.code).emit("room:state", room);
-      } else if (!alreadyWon) {
-        socket.emit("game:wrong-answer", { songTitle });
-      }
+      const player = room.players.find((p) => p.id === socket.id);
+      if (!player) return;
+
+      const roundNumber = room.round.roundNumber;
+      const delayMs = player.handicapSeconds * 1000;
+
+      const timerId = setTimeout(() => {
+        cancelPendingAnswer(room.code, socket.id);
+        const currentRoom = getRoomBySocket(socket.id);
+        if (!currentRoom || !currentRoom.round || currentRoom.round.roundNumber !== roundNumber) return;
+
+        const { correct, alreadyWon } = submitAnswer(currentRoom, socket.id, songId, songTitle);
+        if (correct) {
+          cancelAllPendingAnswers(currentRoom.code);
+          const song = getSongForRound(currentRoom.code, currentRoom.round.roundNumber);
+          const winner = currentRoom.players.find((p) => p.id === socket.id);
+          io.to(currentRoom.code).emit("game:reveal", {
+            song: song!,
+            winnerId: socket.id,
+            winnerNickname: winner?.nickname ?? null,
+          });
+          io.to(currentRoom.code).emit("room:state", currentRoom);
+        } else if (!alreadyWon) {
+          socket.emit("game:wrong-answer", { songTitle });
+        }
+      }, delayMs);
+
+      addPendingAnswer(room.code, socket.id, {
+        timerId,
+        socketId: socket.id,
+        songId,
+        songTitle,
+        roomCode: room.code,
+        roundNumber,
+      });
     });
 
     socket.on("game:extend", () => {
@@ -141,7 +178,7 @@ export function registerHandlers(io: IO) {
       if (!room || !isHost(socket.id, room) || !room.round) return;
       const duration = extendDuration(room);
       if (duration !== null) {
-        io.to(room.code).emit("game:round", room.round);
+        io.to(room.code).emit("game:extended", { currentStepIndex: room.round!.currentStepIndex });
       }
     });
 
@@ -150,6 +187,7 @@ export function registerHandlers(io: IO) {
       if (!room || !isHost(socket.id, room)) return;
       if (!room.round || room.round.winnerId !== null) return;
 
+      cancelAllPendingAnswers(room.code);
       const song = getSongForRound(room.code, room.round.roundNumber);
       if (song) {
         io.to(room.code).emit("game:reveal", {
@@ -193,6 +231,8 @@ export function registerHandlers(io: IO) {
 
     socket.on("disconnect", () => {
       console.log(`disconnected: ${socket.id}`);
+      const room = getRoomBySocket(socket.id);
+      if (room) cancelPendingAnswer(room.code, socket.id);
       const result = leaveRoom(socket.id);
       if (result) {
         io.to(result.room.code).emit("room:state", result.room);

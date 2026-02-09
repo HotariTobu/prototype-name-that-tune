@@ -3,6 +3,7 @@ export interface Player {
   nickname: string;
   score: number;
   isHost: boolean;
+  handicapSeconds: number;
 }
 
 export interface Song {
@@ -45,6 +46,7 @@ export interface ClientToServerEvents {
   "room:join": (data: { code: string; sessionId: string }, callback: (res: { ok: true } | { ok: false; error: string }) => void) => void;
   "room:leave": () => void;
   "room:nickname": (data: { nickname: string }, callback: (res: { ok: true } | { ok: false; error: string }) => void) => void;
+  "room:handicap": (data: { seconds: number }, callback: (res: { ok: true } | { ok: false; error: string }) => void) => void;
   "room:settings": (data: Partial<RoomSettings>) => void;
   "lobby:songs": (data: { songs: Song[] }) => void;
   "game:start": (data: { songs: Song[] }) => void;
@@ -63,6 +65,7 @@ export interface ServerToClientEvents {
   "game:round": (round: RoundState) => void;
   "game:reveal": (data: { song: Song; winnerId: string | null; winnerNickname: string | null }) => void;
   "game:finished": (data: { players: Player[] }) => void;
+  "game:extended": (data: { currentStepIndex: number }) => void;
   "game:play-song": (data: { songIndex: number; duration: number }) => void;
   "game:wrong-answer": (data: { songTitle: string }) => void;
   "lobby:songs": (data: { songs: Song[] }) => void;

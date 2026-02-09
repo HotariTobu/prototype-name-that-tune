@@ -24,17 +24,19 @@ interface Props {
   };
   songs: Song[];
   wrongAnswer: string | null;
+  answerPending: { songTitle: string; submittedAt: number } | null;
 }
 
 export function GameScreen({
   room, round, reveal, playSongEvent, isHost, mySocketId,
   onPlay, onAnswer, onExtend, onGiveUp, onNext, onEnd, onLeave,
-  musicKit, songs, wrongAnswer,
+  musicKit, songs, wrongAnswer, answerPending,
 }: Props) {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<Song[]>([]);
   const [playing, setPlaying] = useState(false);
   const [wrongFeedback, setWrongFeedback] = useState<string | null>(null);
+  const [pendingCountdown, setPendingCountdown] = useState<number | null>(null);
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -60,6 +62,25 @@ export function GameScreen({
       return () => clearTimeout(timer);
     }
   }, [wrongAnswer]);
+
+  const myPlayer = room.players.find((p) => p.id === mySocketId);
+  const myHandicap = myPlayer?.handicapSeconds ?? 0;
+
+  useEffect(() => {
+    if (!answerPending || myHandicap <= 0) {
+      setPendingCountdown(null);
+      return;
+    }
+    const endTime = answerPending.submittedAt + myHandicap * 1000;
+    const update = () => {
+      const remaining = Math.max(0, (endTime - Date.now()) / 1000);
+      setPendingCountdown(remaining);
+      if (remaining <= 0) clearInterval(interval);
+    };
+    update();
+    const interval = setInterval(update, 100);
+    return () => clearInterval(interval);
+  }, [answerPending, myHandicap]);
 
   // Show "Playing..." for non-host players
   useEffect(() => {
@@ -194,6 +215,19 @@ export function GameScreen({
         </div>
       ) : (
         <div className="space-y-2">
+          {answerPending && pendingCountdown !== null && pendingCountdown > 0 && (
+            <div className="bg-yellow-50 border border-yellow-300 rounded p-3 text-center">
+              <p className="text-yellow-700 text-sm">
+                "{answerPending.songTitle}" — checking in {pendingCountdown.toFixed(1)}s
+              </p>
+              <div className="mt-1 h-1.5 bg-yellow-200 rounded overflow-hidden">
+                <div
+                  className="h-full bg-yellow-500 transition-all duration-100"
+                  style={{ width: `${(pendingCountdown / myHandicap) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
           {wrongFeedback && (
             <p className="text-center text-red-500 font-bold">
               Wrong: {wrongFeedback}
@@ -243,6 +277,9 @@ export function GameScreen({
                 <span>
                   {p.nickname}
                   {p.id === mySocketId ? " (you)" : ""}
+                  {p.handicapSeconds > 0 && (
+                    <span className="ml-1 text-xs text-gray-400">+{p.handicapSeconds}s</span>
+                  )}
                 </span>
                 <span className="font-mono">{p.score}</span>
               </li>
