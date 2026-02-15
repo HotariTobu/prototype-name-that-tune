@@ -45,6 +45,7 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
   const [loadingLibrary, setLoadingLibrary] = useState(false);
   const [playlistUrl, setPlaylistUrl] = useState("");
   const [urlError, setUrlError] = useState("");
+  const [libraryFilter, setLibraryFilter] = useState("");
 
   const handleSetNickname = async () => {
     if (!nickname.trim()) {
@@ -93,6 +94,7 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
   const handleSwitchToLibrary = async () => {
     setPlaylistSource("library");
     setPlaylists([]);
+    setLibraryFilter("");
     if (!musicKit.authorized) return;
     setLoadingLibrary(true);
     const libraryPlaylists = await musicKit.getLibraryPlaylists();
@@ -399,6 +401,16 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
             </p>
           )}
 
+          {playlistSource === "library" && musicKit.authorized && !loadingLibrary && playlists.length > 0 && (
+            <input
+              type="text"
+              placeholder="Filter playlists..."
+              value={libraryFilter}
+              onChange={(e) => setLibraryFilter(e.target.value)}
+              className="border p-2 rounded w-full"
+            />
+          )}
+
           {playlistSource === "url" && (
             <div className="space-y-2">
               <div className="flex gap-2">
@@ -421,20 +433,27 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
           {loadingLibrary && <p className="text-sm text-gray-500">Loading library playlists...</p>}
           {loadingSongs && <p className="text-sm text-gray-500">Loading songs...</p>}
 
-          {!loadingSongs && playlists.length > 0 && (
-            <ul className="space-y-1 max-h-60 overflow-y-auto">
-              {playlists.map((pl) => (
-                <li key={pl.id}>
-                  <button
-                    onClick={() => handleSelectPlaylist(pl)}
-                    className="w-full text-left p-2 hover:bg-gray-100 rounded"
-                  >
-                    {pl.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          {!loadingSongs && playlists.length > 0 && (() => {
+            const displayList = playlistSource === "library" && libraryFilter.trim()
+              ? playlists.filter((pl) => (pl.name ?? "").toLowerCase().includes(libraryFilter.trim().toLowerCase()))
+              : playlists;
+            return displayList.length > 0 ? (
+              <ul className="space-y-1 max-h-60 overflow-y-auto">
+                {displayList.map((pl) => (
+                  <li key={pl.id}>
+                    <button
+                      onClick={() => handleSelectPlaylist(pl)}
+                      className="w-full text-left p-2 hover:bg-gray-100 rounded"
+                    >
+                      {pl.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-2">No matching playlists</p>
+            );
+          })()}
         </div>
       </dialog>
     </div>
