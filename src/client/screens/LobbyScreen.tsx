@@ -34,6 +34,7 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
   const [unlimited, setUnlimited] = useState(room.settings.totalRounds === 0);
   const [rounds, setRounds] = useState(room.settings.totalRounds || 10);
   const [durationStepsInput, setDurationStepsInput] = useState(room.settings.durationSteps.join(", "));
+  const [scoringInput, setScoringInput] = useState(room.settings.scoringScheme.join(", "));
   const [handicap, setHandicap] = useState(myPlayer?.handicapSeconds ?? 0);
 
   // Playlist dialog state
@@ -152,9 +153,15 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
       .map((s) => Number(s.trim()))
       .filter((n) => !isNaN(n) && n > 0);
     const steps = parsedSteps.length > 0 ? parsedSteps : [1, 2, 4, 8, 16];
+    const parsedScoring = scoringInput
+      .split(",")
+      .map((s) => Number(s.trim()))
+      .filter((n) => !isNaN(n) && n > 0);
+    const scoring = parsedScoring.length > 0 ? parsedScoring : [4, 2, 1];
     onUpdateSettings({
       totalRounds: unlimited ? 0 : Math.min(rounds, shuffled.length),
       durationSteps: steps,
+      scoringScheme: scoring,
     });
     onStart(shuffled);
   };
@@ -305,6 +312,17 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
                 placeholder="1, 2, 4, 8, 16"
                 className="border p-2 rounded w-full font-normal mt-1"
               />
+            </label>
+            <label className="block font-bold">
+              Scoring (points by finish order, comma-separated)
+              <input
+                type="text"
+                value={scoringInput}
+                onChange={(e) => setScoringInput(e.target.value)}
+                placeholder="4, 2, 1"
+                className="border p-2 rounded w-full font-normal mt-1"
+              />
+              <span className="text-xs text-gray-500 font-normal">e.g. "4, 2, 1" = 1st gets 4pts, 2nd gets 2pts, 3rd gets 1pt</span>
             </label>
             <label className="flex items-center gap-2 font-bold">
               <input

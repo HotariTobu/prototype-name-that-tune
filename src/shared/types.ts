@@ -19,8 +19,15 @@ export type RoomPhase = "lobby" | "playing" | "finished";
 export interface RoomSettings {
   totalRounds: number;
   durationSteps: number[];
+  scoringScheme: number[];
   playlistId: string;
   playlistName: string;
+}
+
+export interface RoundWinner {
+  playerId: string;
+  nickname: string;
+  points: number;
 }
 
 export interface RoundState {
@@ -29,7 +36,7 @@ export interface RoundState {
   song: Song | null;
   revealedSong: Song | null;
   answered: Record<string, string>;
-  winnerId: string | null;
+  winners: RoundWinner[];
 }
 
 export interface RoomState {
@@ -64,7 +71,8 @@ export interface ServerToClientEvents {
   "room:state": (state: RoomState) => void;
   "room:error": (error: string) => void;
   "game:round": (round: RoundState) => void;
-  "game:reveal": (data: { song: Song; winnerId: string | null; winnerNickname: string | null }) => void;
+  "game:scored": (data: { playerId: string; nickname: string; points: number; position: number }) => void;
+  "game:reveal": (data: { song: Song; winners: RoundWinner[] }) => void;
   "game:finished": (data: { players: Player[] }) => void;
   "game:extended": (data: { currentStepIndex: number }) => void;
   "game:play-song": (data: { songIndex: number; duration: number }) => void;

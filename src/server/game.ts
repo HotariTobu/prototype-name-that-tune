@@ -68,7 +68,7 @@ export function startRound(room: RoomState, roundNumber: number): RoundState {
     song: null,
     revealedSong: null,
     answered: {},
-    winnerId: null,
+    winners: [],
   };
   room.round = round;
   return round;
@@ -89,23 +89,33 @@ export function submitAnswer(
   socketId: string,
   songId: string,
   songTitle: string
-): { correct: boolean; alreadyWon: boolean } {
+):
+  | { correct: false; reason: "no-round" | "wrong" | "already-scored" | "round-closed" }
+  | { correct: true; points: number; position: number; allSlotsFilled: boolean } {
   const round = room.round;
-  if (!round) return { correct: false, alreadyWon: false };
-  if (round.winnerId) return { correct: false, alreadyWon: true };
+  if (!round) return { correct: false, reason: "no-round" };
+
+  const scheme = room.settings.scoringScheme;
+  if (round.winners.length >= scheme.length) return { correct: false, reason: "round-closed" };
+  if (round.winners.some((w) => w.playerId === socketId)) return { correct: false, reason: "already-scored" };
+
   round.answered[socketId] = songTitle;
 
   const correctSong = getSongForRound(room.code, round.roundNumber);
-  if (!correctSong) return { correct: false, alreadyWon: false };
+  if (!correctSong) return { correct: false, reason: "no-round" };
 
   if (songId === correctSong.id) {
-    round.winnerId = socketId;
+    const position = round.winners.length;
+    const points = scheme[position] ?? 0;
     const player = room.players.find((p) => p.id === socketId);
-    if (player) player.score += 1;
-    return { correct: true, alreadyWon: false };
+    const nickname = player?.nickname ?? "";
+    if (player) player.score += points;
+    round.winners.push({ playerId: socketId, nickname, points });
+    const allSlotsFilled = round.winners.length >= scheme.length;
+    return { correct: true, points, position, allSlotsFilled };
   }
 
-  return { correct: false, alreadyWon: false };
+  return { correct: false, reason: "wrong" };
 }
 
 export function extendDuration(room: RoomState): number | null {

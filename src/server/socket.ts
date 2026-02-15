@@ -152,18 +152,26 @@ export function registerHandlers(io: IO) {
         const currentRoom = getRoomBySocket(socket.id);
         if (!currentRoom || !currentRoom.round || currentRoom.round.roundNumber !== roundNumber) return;
 
-        const { correct, alreadyWon } = submitAnswer(currentRoom, socket.id, songId, songTitle);
-        if (correct) {
-          cancelAllPendingAnswers(currentRoom.code);
-          const song = getSongForRound(currentRoom.code, currentRoom.round.roundNumber);
-          const winner = currentRoom.players.find((p) => p.id === socket.id);
-          io.to(currentRoom.code).emit("game:reveal", {
-            song: song!,
-            winnerId: socket.id,
-            winnerNickname: winner?.nickname ?? null,
+        const result = submitAnswer(currentRoom, socket.id, songId, songTitle);
+        if (result.correct) {
+          const player = currentRoom.players.find((p) => p.id === socket.id);
+          io.to(currentRoom.code).emit("game:scored", {
+            playerId: socket.id,
+            nickname: player?.nickname ?? "",
+            points: result.points,
+            position: result.position,
           });
           io.to(currentRoom.code).emit("room:state", currentRoom);
-        } else if (!alreadyWon) {
+
+          if (result.allSlotsFilled) {
+            cancelAllPendingAnswers(currentRoom.code);
+            const song = getSongForRound(currentRoom.code, currentRoom.round.roundNumber);
+            io.to(currentRoom.code).emit("game:reveal", {
+              song: song!,
+              winners: currentRoom.round.winners,
+            });
+          }
+        } else if (result.reason === "wrong") {
           socket.emit("game:wrong-answer", { songTitle });
         }
       }, delayMs);
@@ -189,16 +197,14 @@ export function registerHandlers(io: IO) {
 
     socket.on("game:giveup", () => {
       const room = getRoomBySocket(socket.id);
-      if (!room || !isHost(socket.id, room)) return;
-      if (!room.round || room.round.winnerId !== null) return;
+      if (!room || !isHost(socket.id, room) || !room.round) return;
 
       cancelAllPendingAnswers(room.code);
       const song = getSongForRound(room.code, room.round.roundNumber);
       if (song) {
         io.to(room.code).emit("game:reveal", {
           song,
-          winnerId: null,
-          winnerNickname: null,
+          winners: room.round.winners,
         });
       }
     });

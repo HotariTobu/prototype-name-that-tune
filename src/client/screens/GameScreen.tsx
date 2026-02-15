@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Fuse from "fuse.js";
-import type { RoomState, RoundState, Song } from "../../shared/types.ts";
+import type { RoomState, RoundState, Song, RoundWinner } from "../../shared/types.ts";
 
 interface Props {
   room: RoomState;
   round: RoundState;
-  reveal: { song: Song; winnerId: string | null; winnerNickname: string | null } | null;
+  reveal: { song: Song; winners: RoundWinner[] } | null;
   playSongEvent: { songIndex: number; duration: number } | null;
+  scoredPlayers: RoundWinner[];
   isHost: boolean;
   mySocketId: string | undefined;
   onPlay: () => void;
@@ -29,7 +30,7 @@ interface Props {
 }
 
 export function GameScreen({
-  room, round, reveal, playSongEvent, isHost, mySocketId,
+  room, round, reveal, playSongEvent, scoredPlayers, isHost, mySocketId,
   onPlay, onAnswer, onExtend, onGiveUp, onNext, onEnd, onLeave,
   musicKit, songs, wrongAnswer, answerPending,
 }: Props) {
@@ -62,6 +63,7 @@ export function GameScreen({
 
   const myPlayer = room.players.find((p) => p.id === mySocketId);
   const myHandicap = myPlayer?.handicapSeconds ?? 0;
+  const myScore = scoredPlayers.find((w) => w.playerId === mySocketId);
 
   useEffect(() => {
     if (!answerPending || myHandicap <= 0) {
@@ -170,7 +172,7 @@ export function GameScreen({
               disabled={isPlaying}
               className="bg-gray-500 text-white px-4 py-2 rounded disabled:opacity-50"
             >
-              Give Up
+              {scoredPlayers.length > 0 ? "Close Answers" : "Give Up"}
             </button>
           </div>
         )}
@@ -187,8 +189,14 @@ export function GameScreen({
               <p className="text-gray-500">{reveal.song.artist}</p>
             </div>
           </div>
-          {reveal.winnerNickname ? (
-            <p className="text-green-600 font-bold">{reveal.winnerNickname} got it!</p>
+          {reveal.winners.length > 0 ? (
+            <ul className="space-y-1 mt-1">
+              {reveal.winners.map((w, i) => (
+                <li key={w.playerId} className="text-green-600 font-bold">
+                  {i + 1}. {w.nickname} (+{w.points}pt{w.points !== 1 ? "s" : ""})
+                </li>
+              ))}
+            </ul>
           ) : (
             <p className="text-gray-500">No one got it</p>
           )}
@@ -203,51 +211,68 @@ export function GameScreen({
         </div>
       ) : (
         <div className="space-y-2">
-          {answerPending && pendingCountdown !== null && pendingCountdown > 0 && (
-            <div className="bg-yellow-50 border border-yellow-300 rounded p-3 text-center">
-              <p className="text-yellow-700 text-sm">
-                "{answerPending.songTitle}" — checking in {pendingCountdown.toFixed(1)}s
-              </p>
-              <div className="mt-1 h-1.5 bg-yellow-200 rounded overflow-hidden">
-                <div
-                  className="h-full bg-yellow-500 transition-all duration-100"
-                  style={{ width: `${(pendingCountdown / myHandicap) * 100}%` }}
-                />
-              </div>
+          {scoredPlayers.length > 0 && (
+            <div className="space-y-1">
+              {scoredPlayers.map((w, i) => (
+                <div key={w.playerId} className="bg-green-50 border border-green-200 rounded p-2 text-center text-sm">
+                  <span className="text-green-700 font-bold">{w.nickname}</span> scored {w.points}pt{w.points !== 1 ? "s" : ""}! ({i + 1}{i === 0 ? "st" : i === 1 ? "nd" : i === 2 ? "rd" : "th"})
+                </div>
+              ))}
             </div>
           )}
-          {wrongFeedback && (
-            <p className="text-center text-red-500 font-bold">
-              Wrong: {wrongFeedback}
-            </p>
-          )}
-          <input
-            type="text"
-            placeholder="Type the song title..."
-            value={query}
-            onChange={(e) => handleSearch(e.target.value)}
-            className="border p-2 rounded w-full"
-            autoFocus
-          />
-          {suggestions.length > 0 && (
-            <ul className="border rounded max-h-60 overflow-y-auto">
-              {suggestions.map((s) => (
-                <li key={s.id}>
-                  <button
-                    onClick={() => handleSelect(s)}
-                    className="w-full text-left p-2 hover:bg-blue-50 flex items-center gap-2"
-                  >
-                    {s.artworkUrl && (
-                      <img src={s.artworkUrl} alt="" className="w-10 h-10 rounded" />
-                    )}
-                    <div>
-                      <p className="font-medium">{s.title}</p>
-                      <p className="text-sm text-gray-500">{s.artist}</p>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
+          {myScore ? (
+            <div className="bg-blue-50 border border-blue-200 rounded p-4 text-center">
+              <p className="text-blue-700 font-bold text-lg">You scored {myScore.points} point{myScore.points !== 1 ? "s" : ""}!</p>
+            </div>
+          ) : (
+            <>
+              {answerPending && pendingCountdown !== null && pendingCountdown > 0 && (
+                <div className="bg-yellow-50 border border-yellow-300 rounded p-3 text-center">
+                  <p className="text-yellow-700 text-sm">
+                    "{answerPending.songTitle}" — checking in {pendingCountdown.toFixed(1)}s
+                  </p>
+                  <div className="mt-1 h-1.5 bg-yellow-200 rounded overflow-hidden">
+                    <div
+                      className="h-full bg-yellow-500 transition-all duration-100"
+                      style={{ width: `${(pendingCountdown / myHandicap) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              {wrongFeedback && (
+                <p className="text-center text-red-500 font-bold">
+                  Wrong: {wrongFeedback}
+                </p>
+              )}
+              <input
+                type="text"
+                placeholder="Type the song title..."
+                value={query}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="border p-2 rounded w-full"
+                autoFocus
+              />
+              {suggestions.length > 0 && (
+                <ul className="border rounded max-h-60 overflow-y-auto">
+                  {suggestions.map((s) => (
+                    <li key={s.id}>
+                      <button
+                        onClick={() => handleSelect(s)}
+                        className="w-full text-left p-2 hover:bg-blue-50 flex items-center gap-2"
+                      >
+                        {s.artworkUrl && (
+                          <img src={s.artworkUrl} alt="" className="w-10 h-10 rounded" />
+                        )}
+                        <div>
+                          <p className="font-medium">{s.title}</p>
+                          <p className="text-sm text-gray-500">{s.artist}</p>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </div>
       )}

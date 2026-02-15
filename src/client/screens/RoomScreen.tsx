@@ -12,7 +12,8 @@ interface Props {
     socket: { id: string | undefined } | null;
     roomState: import("../../shared/types.ts").RoomState | null;
     round: import("../../shared/types.ts").RoundState | null;
-    reveal: { song: Song; winnerId: string | null; winnerNickname: string | null } | null;
+    reveal: { song: Song; winners: import("../../shared/types.ts").RoundWinner[] } | null;
+    scoredPlayers: import("../../shared/types.ts").RoundWinner[];
     playSong: { songIndex: number; duration: number } | null;
     finished: import("../../shared/types.ts").Player[] | null;
     checkRoom: (code: string) => Promise<{ exists: boolean }>;
@@ -134,6 +135,7 @@ export function RoomScreen({ roomCode, navigate, socket, isHost, musicKit }: Pro
         round={socket.round}
         reveal={socket.reveal}
         playSongEvent={socket.playSong}
+        scoredPlayers={socket.scoredPlayers}
         isHost={isHost}
         mySocketId={socket.socket?.id}
         onPlay={socket.play}

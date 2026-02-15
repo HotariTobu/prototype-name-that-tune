@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { io, type Socket } from "socket.io-client";
-import type { ClientToServerEvents, ServerToClientEvents, RoomState, RoundState, Song, Player } from "../../shared/types.ts";
+import type { ClientToServerEvents, ServerToClientEvents, RoomState, RoundState, Song, Player, RoundWinner } from "../../shared/types.ts";
 
 type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -9,7 +9,8 @@ export function useSocket() {
   const [connected, setConnected] = useState(false);
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [round, setRound] = useState<RoundState | null>(null);
-  const [reveal, setReveal] = useState<{ song: Song; winnerId: string | null; winnerNickname: string | null } | null>(null);
+  const [reveal, setReveal] = useState<{ song: Song; winners: RoundWinner[] } | null>(null);
+  const [scoredPlayers, setScoredPlayers] = useState<RoundWinner[]>([]);
   const [playSong, setPlaySong] = useState<{ songIndex: number; duration: number } | null>(null);
   const [finished, setFinished] = useState<Player[] | null>(null);
   const [wrongAnswer, setWrongAnswer] = useState<string | null>(null);
@@ -37,6 +38,7 @@ export function useSocket() {
         setFinished(null);
         setSongs([]);
         setLobbySongs([]);
+        setScoredPlayers([]);
       } else {
         setLobbySongs([]);
       }
@@ -49,6 +51,11 @@ export function useSocket() {
       setPlaySong(null);
       setWrongAnswer(null);
       setAnswerPending(null);
+      setScoredPlayers([]);
+    });
+    socket.on("game:scored", (data) => {
+      setScoredPlayers((prev) => [...prev, { playerId: data.playerId, nickname: data.nickname, points: data.points }]);
+      setAnswerPending((prev) => prev && data.playerId === socket.id ? null : prev);
     });
     socket.on("game:reveal", (data) => {
       setReveal(data);
@@ -98,6 +105,7 @@ export function useSocket() {
     setPlaySong(null);
     setWrongAnswer(null);
     setAnswerPending(null);
+    setScoredPlayers([]);
   }, []);
 
   const setNickname = useCallback((nickname: string): Promise<{ ok: true } | { ok: false; error: string }> => {
@@ -184,5 +192,6 @@ export function useSocket() {
     endGame,
     backToLobby,
     answerPending,
+    scoredPlayers,
   };
 }
