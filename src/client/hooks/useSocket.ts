@@ -4,18 +4,8 @@ import type { ClientToServerEvents, ServerToClientEvents, RoomState, RoundState,
 
 type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
-function getSessionId(): string {
-  let id = sessionStorage.getItem("ntt-session-id");
-  if (!id) {
-    id = crypto.randomUUID();
-    sessionStorage.setItem("ntt-session-id", id);
-  }
-  return id;
-}
-
 export function useSocket() {
   const socketRef = useRef<AppSocket | null>(null);
-  const sessionId = useRef(getSessionId()).current;
   const [connected, setConnected] = useState(false);
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [round, setRound] = useState<RoundState | null>(null);
@@ -28,9 +18,15 @@ export function useSocket() {
   const [answerPending, setAnswerPending] = useState<{ songTitle: string; submittedAt: number } | null>(null);
 
   useEffect(() => {
-    const socket: AppSocket = io({ transports: ["websocket"] });
+    const socket: AppSocket = io({
+      transports: ["websocket"],
+      auth: { sessionId: sessionStorage.getItem("ntt-session-id") || undefined },
+    });
     socketRef.current = socket;
 
+    socket.on("session:id", (id) => {
+      sessionStorage.setItem("ntt-session-id", id);
+    });
     socket.on("connect", () => setConnected(true));
     socket.on("disconnect", () => setConnected(false));
     socket.on("room:state", (state) => {
@@ -75,19 +71,19 @@ export function useSocket() {
 
   const createRoom = useCallback((): Promise<{ ok: true; code: string } | { ok: false; error: string }> => {
     return new Promise((resolve) => {
-      socketRef.current?.emit("room:create", { sessionId }, resolve);
+      socketRef.current?.emit("room:create", {}, resolve);
     });
   }, []);
 
   const checkRoom = useCallback((code: string): Promise<{ exists: boolean }> => {
     return new Promise((resolve) => {
-      socketRef.current?.emit("room:check", { code, sessionId }, resolve);
+      socketRef.current?.emit("room:check", { code }, resolve);
     });
   }, []);
 
   const joinRoom = useCallback((code: string): Promise<{ ok: true } | { ok: false; error: string }> => {
     return new Promise((resolve) => {
-      socketRef.current?.emit("room:join", { code, sessionId }, resolve);
+      socketRef.current?.emit("room:join", { code }, resolve);
     });
   }, []);
 

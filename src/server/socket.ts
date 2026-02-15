@@ -1,6 +1,6 @@
 import type { Server, Socket } from "socket.io";
 import type { ClientToServerEvents, ServerToClientEvents } from "../shared/types.ts";
-import { createRoom, joinRoom, leaveRoom, getRoom, getRoomBySocket, updateSettings, isHost, setNickname, setHandicap, saveGameParticipants, isGameParticipant } from "./rooms.ts";
+import { createRoom, joinRoom, leaveRoom, getRoom, getRoomBySocket, updateSettings, isHost, setNickname, setHandicap, saveGameParticipants, isGameParticipant, getSessionId, setSessionId } from "./rooms.ts";
 import { startGame, submitAnswer, extendDuration, canAdvanceRound, startRound, getSongForRound, endGame, resetToLobby, getRoomSongs, setLobbySongs, getLobbySongs, addPendingAnswer, cancelPendingAnswer, cancelAllPendingAnswers } from "./game.ts";
 
 type IO = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -8,16 +8,21 @@ type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 export function registerHandlers(io: IO) {
   io.on("connection", (socket: AppSocket) => {
-    console.log(`connected: ${socket.id}`);
+    // Resolve or generate sessionId
+    const clientSessionId = (socket.handshake.auth as { sessionId?: string }).sessionId;
+    const sessionId = clientSessionId || crypto.randomUUID();
+    setSessionId(socket.id, sessionId);
+    socket.emit("session:id", sessionId);
+    console.log(`connected: ${socket.id} (session: ${sessionId})`);
 
-    socket.on("room:create", ({ sessionId }, cb) => {
+    socket.on("room:create", (_data, cb) => {
       const room = createRoom(socket.id, sessionId);
       socket.join(room.code);
       cb({ ok: true, code: room.code });
       io.to(room.code).emit("room:state", room);
     });
 
-    socket.on("room:check", ({ code, sessionId }, cb) => {
+    socket.on("room:check", ({ code }, cb) => {
       const room = getRoom(code);
       if (!room) {
         cb({ exists: false });
@@ -31,7 +36,7 @@ export function registerHandlers(io: IO) {
       cb({ exists: isGameParticipant(code, sessionId) });
     });
 
-    socket.on("room:join", ({ code, sessionId }, cb) => {
+    socket.on("room:join", ({ code }, cb) => {
       const result = joinRoom(code, socket.id, sessionId);
       if (typeof result === "string") {
         cb({ ok: false, error: result });

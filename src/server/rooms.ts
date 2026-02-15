@@ -156,6 +156,14 @@ export function updateSettings(code: string, settings: Partial<RoomSettings>): R
   return room;
 }
 
+export function getSessionId(socketId: string): string | undefined {
+  return socketToSession.get(socketId);
+}
+
+export function setSessionId(socketId: string, sessionId: string): void {
+  socketToSession.set(socketId, sessionId);
+}
+
 export function isHost(socketId: string, room: RoomState): boolean {
   return room.players.some((p) => p.id === socketId && p.isHost);
 }

@@ -41,9 +41,9 @@ export interface RoomState {
 }
 
 export interface ClientToServerEvents {
-  "room:create": (data: { sessionId: string }, callback: (res: { ok: true; code: string } | { ok: false; error: string }) => void) => void;
-  "room:check": (data: { code: string; sessionId: string }, callback: (res: { exists: boolean }) => void) => void;
-  "room:join": (data: { code: string; sessionId: string }, callback: (res: { ok: true } | { ok: false; error: string }) => void) => void;
+  "room:create": (data: {}, callback: (res: { ok: true; code: string } | { ok: false; error: string }) => void) => void;
+  "room:check": (data: { code: string }, callback: (res: { exists: boolean }) => void) => void;
+  "room:join": (data: { code: string }, callback: (res: { ok: true } | { ok: false; error: string }) => void) => void;
   "room:leave": () => void;
   "room:nickname": (data: { nickname: string }, callback: (res: { ok: true } | { ok: false; error: string }) => void) => void;
   "room:handicap": (data: { seconds: number }, callback: (res: { ok: true } | { ok: false; error: string }) => void) => void;
@@ -60,6 +60,7 @@ export interface ClientToServerEvents {
 }
 
 export interface ServerToClientEvents {
+  "session:id": (sessionId: string) => void;
   "room:state": (state: RoomState) => void;
   "room:error": (error: string) => void;
   "game:round": (round: RoundState) => void;
