@@ -12,8 +12,11 @@ export function useMusicKit() {
   const [configured, setConfigured] = useState(false);
   const [authorized, setAuthorized] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(false);
   const musicRef = useRef<MusicKit.MusicKitInstance | null>(null);
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chainRef = useRef<Promise<void>>(Promise.resolve());
+  const genRef = useRef(0);
 
   const configure = useCallback(async () => {
     setError(null);
@@ -185,52 +188,76 @@ export function useMusicKit() {
     }
   }, []);
 
-  const playSong = useCallback(async (song: Song, durationSec: number) => {
+  // Serialize all MusicKit operations to prevent race conditions
+  const enqueue = useCallback((fn: () => Promise<void>) => {
+    chainRef.current = chainRef.current.then(fn, fn);
+    return chainRef.current;
+  }, []);
+
+  const playSong = useCallback((song: Song, durationSec: number) => {
     const mk = musicRef.current;
     if (!mk) return;
 
+    const gen = ++genRef.current;
     if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
 
-    try {
-      try { await mk.stop(); } catch {}
-      mk.repeatMode = MusicKit.PlayerRepeatMode.none;
-      await mk.setQueue({ songs: [song.id], startPlaying: true });
-
-      stopTimerRef.current = setTimeout(async () => {
-        try {
-          await mk.stop();
-        } catch {}
-      }, durationSec * 1000);
-    } catch (e) {
-      console.error("Play error:", e);
-    }
-  }, []);
-
-  const playFullSong = useCallback(async (song: Song) => {
-    const mk = musicRef.current;
-    if (!mk) return;
-
-    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
-
-    try {
-      try { await mk.stop(); } catch {}
-      mk.repeatMode = MusicKit.PlayerRepeatMode.one;
-      await mk.setQueue({ songs: [song.id], startPlaying: true });
-    } catch (e) {
-      console.error("PlayFullSong error:", e);
-    }
-  }, []);
-
-  const stop = useCallback(async () => {
-    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
-    try {
-      const mk = musicRef.current;
-      if (mk) {
+    enqueue(async () => {
+      try {
+        try { await mk.stop(); } catch {}
         mk.repeatMode = MusicKit.PlayerRepeatMode.none;
-        await mk.stop();
+        await mk.setQueue({ songs: [song.id], startPlaying: true });
+        setPlaying(true);
+
+        stopTimerRef.current = setTimeout(() => {
+          if (genRef.current !== gen) return;
+          enqueue(async () => {
+            if (genRef.current !== gen) return;
+            try { await mk.stop(); } catch {}
+            setPlaying(false);
+          });
+        }, durationSec * 1000);
+      } catch (e) {
+        console.error("Play error:", e);
+        setPlaying(false);
       }
-    } catch {}
-  }, []);
+    });
+  }, [enqueue]);
+
+  const playFullSong = useCallback((song: Song) => {
+    const mk = musicRef.current;
+    if (!mk) return;
+
+    ++genRef.current;
+    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+
+    enqueue(async () => {
+      try {
+        try { await mk.stop(); } catch {}
+        mk.repeatMode = MusicKit.PlayerRepeatMode.one;
+        await mk.setQueue({ songs: [song.id], startPlaying: true });
+        setPlaying(true);
+      } catch (e) {
+        console.error("PlayFullSong error:", e);
+        setPlaying(false);
+      }
+    });
+  }, [enqueue]);
+
+  const stop = useCallback(() => {
+    ++genRef.current;
+    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+
+    enqueue(async () => {
+      try {
+        const mk = musicRef.current;
+        if (mk) {
+          mk.repeatMode = MusicKit.PlayerRepeatMode.none;
+          await mk.stop();
+        }
+      } catch {}
+      setPlaying(false);
+    });
+  }, [enqueue]);
 
   useEffect(() => {
     return () => {
@@ -253,5 +280,6 @@ export function useMusicKit() {
     playSong,
     playFullSong,
     stop,
+    playing,
   };
 }

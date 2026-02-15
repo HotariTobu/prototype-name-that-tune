@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Fuse from "fuse.js";
 import type { RoomState, RoundState, Song } from "../../shared/types.ts";
 
@@ -18,9 +18,10 @@ interface Props {
   onLeave: () => void;
   musicKit: {
     searchSongs: (term: string) => Promise<Song[]>;
-    playSong: (song: Song, duration: number) => Promise<void>;
-    playFullSong: (song: Song) => Promise<void>;
+    playSong: (song: Song, duration: number) => void;
+    playFullSong: (song: Song) => void;
     stop: () => void;
+    playing: boolean;
   };
   songs: Song[];
   wrongAnswer: string | null;
@@ -34,25 +35,21 @@ export function GameScreen({
 }: Props) {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<Song[]>([]);
-  const [playing, setPlaying] = useState(false);
+  const [remotePlayingIndicator, setRemotePlayingIndicator] = useState(false);
   const [wrongFeedback, setWrongFeedback] = useState<string | null>(null);
   const [pendingCountdown, setPendingCountdown] = useState<number | null>(null);
-  const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isPlaying = isHost ? musicKit.playing : remotePlayingIndicator;
 
   useEffect(() => {
     setQuery("");
     setSuggestions([]);
-    setPlaying(false);
     setWrongFeedback(null);
-    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
     if (isHost) musicKit.stop();
   }, [round.roundNumber]);
 
   useEffect(() => {
-    return () => {
-      if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
-      musicKit.stop();
-    };
+    return () => { musicKit.stop(); };
   }, []);
 
   useEffect(() => {
@@ -82,35 +79,26 @@ export function GameScreen({
     return () => clearInterval(interval);
   }, [answerPending, myHandicap]);
 
-  // Show "Playing..." for non-host players
+  // Show "Playing..." for non-host players (timer-based, no actual audio)
   useEffect(() => {
     if (!playSongEvent || isHost) return;
-    setPlaying(true);
-    const timer = setTimeout(() => setPlaying(false), playSongEvent.duration * 1000);
+    setRemotePlayingIndicator(true);
+    const timer = setTimeout(() => setRemotePlayingIndicator(false), playSongEvent.duration * 1000);
     return () => clearTimeout(timer);
   }, [playSongEvent, isHost]);
 
   // Play full song on reveal (host only), loop until next round
   useEffect(() => {
     if (!reveal || !isHost) return;
-    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
-    setPlaying(true);
     musicKit.playFullSong(reveal.song);
   }, [reveal]);
 
   const duration = room.settings.durationSteps[round.currentStepIndex] ?? 1;
   const currentSong = songs[round.roundNumber - 1];
 
-  const startPlayback = (song: Song, durationSec: number) => {
-    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
-    setPlaying(true);
-    musicKit.playSong(song, durationSec);
-    stopTimerRef.current = setTimeout(() => setPlaying(false), durationSec * 1000);
-  };
-
   const handlePlay = () => {
-    if (!currentSong || playing) return;
-    startPlayback(currentSong, duration);
+    if (!currentSong || isPlaying) return;
+    musicKit.playSong(currentSong, duration);
     onPlay();
   };
 
@@ -158,28 +146,28 @@ export function GameScreen({
       <div className="bg-gray-100 rounded p-3">
         <div className="text-sm mb-2">
           Duration: {duration}s
-          {playing && <span className="ml-2 text-blue-600 font-bold">Playing...</span>}
+          {isPlaying && <span className="ml-2 text-blue-600 font-bold">Playing...</span>}
         </div>
 
         {isHost && !reveal && (
           <div className="flex gap-2">
             <button
               onClick={handlePlay}
-              disabled={playing}
+              disabled={isPlaying}
               className="bg-blue-600 text-white px-4 py-2 rounded flex-1 disabled:opacity-50"
             >
               Play
             </button>
             <button
               onClick={handleExtend}
-              disabled={playing || round.currentStepIndex >= room.settings.durationSteps.length - 1}
+              disabled={isPlaying || round.currentStepIndex >= room.settings.durationSteps.length - 1}
               className="bg-orange-500 text-white px-4 py-2 rounded disabled:opacity-50"
             >
               Extend
             </button>
             <button
               onClick={onGiveUp}
-              disabled={playing}
+              disabled={isPlaying}
               className="bg-gray-500 text-white px-4 py-2 rounded disabled:opacity-50"
             >
               Give Up
