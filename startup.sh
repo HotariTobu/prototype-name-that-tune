@@ -11,6 +11,7 @@ PATH="$HOME/.bun/bin:$PATH"
 
 git clone https://github.com/HotariTobu/prototype-name-that-tune.git /app
 cd /app || exit 1
+git pull
 
 bun install
 
