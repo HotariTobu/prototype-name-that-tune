@@ -13,7 +13,7 @@ interface Props {
   onPlay: () => void;
   onAnswer: (songId: string, songTitle: string) => void;
   onExtend: () => void;
-  onGiveUp: () => void;
+  onCloseAnswers: () => void;
   onNext: () => void;
   onEnd: () => void;
   onLeave: () => void;
@@ -31,7 +31,7 @@ interface Props {
 
 export function GameScreen({
   room, round, reveal, playSongEvent, scoredPlayers, isHost, mySocketId,
-  onPlay, onAnswer, onExtend, onGiveUp, onNext, onEnd, onLeave,
+  onPlay, onAnswer, onExtend, onCloseAnswers, onNext, onEnd, onLeave,
   musicKit, songs, wrongAnswer, answerPending,
 }: Props) {
   const [query, setQuery] = useState("");
@@ -168,11 +168,11 @@ export function GameScreen({
               Extend
             </button>
             <button
-              onClick={onGiveUp}
+              onClick={onCloseAnswers}
               disabled={isPlaying}
               className="bg-gray-500 text-white px-4 py-2 rounded disabled:opacity-50"
             >
-              {scoredPlayers.length > 0 ? "Close Answers" : "Give Up"}
+              Close Answers
             </button>
           </div>
         )}

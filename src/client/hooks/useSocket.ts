@@ -152,8 +152,8 @@ export function useSocket() {
     socketRef.current?.emit("game:back-to-lobby");
   }, []);
 
-  const giveUp = useCallback(() => {
-    socketRef.current?.emit("game:giveup");
+  const closeAnswers = useCallback(() => {
+    socketRef.current?.emit("game:closeAnswers");
   }, []);
 
   const next = useCallback(() => {
@@ -187,7 +187,7 @@ export function useSocket() {
     play,
     answer,
     extend,
-    giveUp,
+    closeAnswers,
     next,
     endGame,
     backToLobby,

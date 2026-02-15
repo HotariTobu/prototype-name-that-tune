@@ -195,7 +195,7 @@ export function registerHandlers(io: IO) {
       }
     });
 
-    socket.on("game:giveup", () => {
+    socket.on("game:closeAnswers", () => {
       const room = getRoomBySocket(socket.id);
       if (!room || !isHost(socket.id, room) || !room.round) return;
 

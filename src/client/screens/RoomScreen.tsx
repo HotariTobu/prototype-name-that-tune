@@ -27,7 +27,7 @@ interface Props {
     play: () => void;
     answer: (songId: string, songTitle: string) => void;
     extend: () => void;
-    giveUp: () => void;
+    closeAnswers: () => void;
     next: () => void;
     endGame: () => void;
     backToLobby: () => void;
@@ -141,7 +141,7 @@ export function RoomScreen({ roomCode, navigate, socket, isHost, musicKit }: Pro
         onPlay={socket.play}
         onAnswer={socket.answer}
         onExtend={socket.extend}
-        onGiveUp={socket.giveUp}
+        onCloseAnswers={socket.closeAnswers}
         onNext={socket.next}
         onEnd={socket.endGame}
         onLeave={() => navigate("/")}

@@ -60,7 +60,7 @@ export interface ClientToServerEvents {
   "game:play": () => void;
   "game:answer": (data: { songId: string; songTitle: string }) => void;
   "game:extend": () => void;
-  "game:giveup": () => void;
+  "game:closeAnswers": () => void;
   "game:next": () => void;
   "game:end": () => void;
   "game:back-to-lobby": () => void;
