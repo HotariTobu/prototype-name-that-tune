@@ -192,9 +192,8 @@ export function useMusicKit() {
     if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
 
     try {
-      if (mk.playbackState === MusicKit.PlaybackStates.playing) {
-        await mk.stop();
-      }
+      try { await mk.stop(); } catch {}
+      mk.repeatMode = MusicKit.PlayerRepeatMode.none;
       await mk.setQueue({ songs: [song.id], startPlaying: true });
 
       stopTimerRef.current = setTimeout(async () => {
@@ -214,9 +213,7 @@ export function useMusicKit() {
     if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
 
     try {
-      if (mk.playbackState === MusicKit.PlaybackStates.playing) {
-        await mk.stop();
-      }
+      try { await mk.stop(); } catch {}
       mk.repeatMode = MusicKit.PlayerRepeatMode.one;
       await mk.setQueue({ songs: [song.id], startPlaying: true });
     } catch (e) {
