@@ -9,6 +9,10 @@ const roomNicknames = new Map<string, Map<string, string>>();
 const nextPlayerNumber = new Map<string, number>();
 // roomCode -> Set<sessionId> — players present when game started
 const gameParticipants = new Map<string, Set<string>>();
+// roomCode -> hostSessionId — remembers who the host is across disconnects
+const roomHostSession = new Map<string, string>();
+// roomCode -> (sessionId -> { score, handicapSeconds }) — preserves player state across disconnect
+const playerState = new Map<string, Map<string, { score: number; handicapSeconds: number }>>();
 
 function generateCode(): string {
   let code: string;
@@ -58,6 +62,7 @@ export function createRoom(hostSocketId: string, sessionId: string): RoomState {
   rooms.set(code, room);
   socketToRoom.set(hostSocketId, code);
   socketToSession.set(hostSocketId, sessionId);
+  roomHostSession.set(code, sessionId);
   return room;
 }
 
@@ -73,10 +78,23 @@ export function joinRoom(code: string, socketId: string, sessionId: string): Roo
 
   if (room.players.length >= 20) return "Room is full";
 
+  const isReturningHost = roomHostSession.get(code) === sessionId;
+  const saved = playerState.get(code)?.get(sessionId);
   const nickname = assignNickname(code, sessionId);
-  room.players.push({ id: socketId, nickname, score: 0, isHost: false, handicapSeconds: 0 });
+  room.players.push({
+    id: socketId,
+    nickname,
+    score: saved?.score ?? 0,
+    isHost: isReturningHost,
+    handicapSeconds: saved?.handicapSeconds ?? 0,
+  });
   socketToRoom.set(socketId, code);
   socketToSession.set(socketId, sessionId);
+
+  if (isReturningHost && room.phase === "paused") {
+    room.phase = "playing";
+  }
+
   return room;
 }
 
@@ -94,7 +112,16 @@ export function setNickname(code: string, socketId: string, nickname: string): R
   return room;
 }
 
-export function leaveRoom(socketId: string): { room: RoomState; wasHost: boolean } | null {
+function deleteRoom(code: string): void {
+  rooms.delete(code);
+  roomNicknames.delete(code);
+  nextPlayerNumber.delete(code);
+  gameParticipants.delete(code);
+  roomHostSession.delete(code);
+  playerState.delete(code);
+}
+
+export function leaveRoom(socketId: string): { room: RoomState; wasHost: boolean; paused: boolean; destroyed: boolean } | null {
   const code = socketToRoom.get(socketId);
   if (!code) return null;
   const room = rooms.get(code);
@@ -104,6 +131,13 @@ export function leaveRoom(socketId: string): { room: RoomState; wasHost: boolean
   const sessionId = socketToSession.get(socketId);
   if (player && sessionId) {
     saveNickname(code, sessionId, player.nickname);
+    if (room.phase !== "lobby") {
+      if (!playerState.has(code)) playerState.set(code, new Map());
+      playerState.get(code)!.set(sessionId, {
+        score: player.score,
+        handicapSeconds: player.handicapSeconds,
+      });
+    }
   }
 
   socketToRoom.delete(socketId);
@@ -112,18 +146,22 @@ export function leaveRoom(socketId: string): { room: RoomState; wasHost: boolean
   room.players = room.players.filter((p) => p.id !== socketId);
 
   if (room.players.length === 0) {
-    rooms.delete(code);
-    roomNicknames.delete(code);
-    nextPlayerNumber.delete(code);
-    gameParticipants.delete(code);
+    deleteRoom(code);
     return null;
   }
 
-  if (wasHost && room.players.length > 0) {
-    room.players[0]!.isHost = true;
+  if (wasHost) {
+    if (room.phase === "playing") {
+      room.phase = "paused";
+      return { room, wasHost, paused: true, destroyed: false };
+    }
+    // Lobby or finished: destroy the room
+    const result = { room, wasHost, paused: false, destroyed: true };
+    deleteRoom(code);
+    return result;
   }
 
-  return { room, wasHost };
+  return { room, wasHost, paused: false, destroyed: false };
 }
 
 export function saveGameParticipants(code: string): void {

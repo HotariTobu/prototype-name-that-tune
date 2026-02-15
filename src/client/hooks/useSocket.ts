@@ -30,6 +30,18 @@ export function useSocket() {
     });
     socket.on("connect", () => setConnected(true));
     socket.on("disconnect", () => setConnected(false));
+    socket.on("room:error", () => {
+      setRoomState(null);
+      setRound(null);
+      setReveal(null);
+      setFinished(null);
+      setSongs([]);
+      setLobbySongs([]);
+      setPlaySong(null);
+      setWrongAnswer(null);
+      setAnswerPending(null);
+      setScoredPlayers([]);
+    });
     socket.on("room:state", (state) => {
       setRoomState(state);
       if (state.phase === "lobby") {

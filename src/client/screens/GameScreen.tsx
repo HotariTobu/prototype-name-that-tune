@@ -132,6 +132,14 @@ export function GameScreen({
 
   return (
     <div className="flex flex-col min-h-screen p-4 gap-4">
+      {room.phase === "paused" && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 text-center max-w-sm mx-4">
+            <h2 className="text-xl font-bold mb-2">Game Paused</h2>
+            <p className="text-gray-600">Waiting for the host to reconnect...</p>
+          </div>
+        </div>
+      )}
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-bold">
           Round {round.roundNumber}{room.settings.totalRounds > 0 ? `/${room.settings.totalRounds}` : ""}

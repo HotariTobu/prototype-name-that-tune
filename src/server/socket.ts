@@ -32,7 +32,7 @@ export function registerHandlers(io: IO) {
         cb({ exists: true });
         return;
       }
-      // During game, only allow participants to see the room
+      // During game or paused, only allow participants to see the room
       cb({ exists: isGameParticipant(code, sessionId) });
     });
 
@@ -61,10 +61,22 @@ export function registerHandlers(io: IO) {
     });
 
     socket.on("room:leave", () => {
+      const room = getRoomBySocket(socket.id);
+      const roomCode = room?.code;
       const result = leaveRoom(socket.id);
       if (result) {
-        socket.leave(result.room.code);
-        io.to(result.room.code).emit("room:state", result.room);
+        if (roomCode) socket.leave(roomCode);
+        if (result.paused) {
+          cancelAllPendingAnswers(result.room.code);
+        }
+        if (result.destroyed) {
+          io.to(result.room.code).emit("room:error", "Host left the room");
+          io.in(result.room.code).socketsLeave(result.room.code);
+        } else {
+          io.to(result.room.code).emit("room:state", result.room);
+        }
+      } else if (roomCode) {
+        socket.leave(roomCode);
       }
     });
 
@@ -140,7 +152,7 @@ export function registerHandlers(io: IO) {
 
     socket.on("game:answer", ({ songId, songTitle }) => {
       const room = getRoomBySocket(socket.id);
-      if (!room || !room.round) return;
+      if (!room || !room.round || room.phase !== "playing") return;
       const player = room.players.find((p) => p.id === socket.id);
       if (!player) return;
 
@@ -246,7 +258,16 @@ export function registerHandlers(io: IO) {
       if (room) cancelPendingAnswer(room.code, socket.id);
       const result = leaveRoom(socket.id);
       if (result) {
-        io.to(result.room.code).emit("room:state", result.room);
+        if (result.paused) {
+          cancelAllPendingAnswers(result.room.code);
+        }
+        if (result.destroyed) {
+          // Host left in lobby/finished: notify remaining players and kick them
+          io.to(result.room.code).emit("room:error", "Host left the room");
+          io.in(result.room.code).socketsLeave(result.room.code);
+        } else {
+          io.to(result.room.code).emit("room:state", result.room);
+        }
       }
     });
   });

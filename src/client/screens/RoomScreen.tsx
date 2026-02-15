@@ -127,8 +127,8 @@ export function RoomScreen({ roomCode, navigate, socket, isHost, musicKit }: Pro
     );
   }
 
-  // Playing
-  if (room.phase === "playing" && socket.round) {
+  // Playing or Paused
+  if ((room.phase === "playing" || room.phase === "paused") && socket.round) {
     return (
       <GameScreen
         room={room}

@@ -14,7 +14,7 @@ export interface Song {
   previewUrl: string;
 }
 
-export type RoomPhase = "lobby" | "playing" | "finished";
+export type RoomPhase = "lobby" | "playing" | "paused" | "finished";
 
 export interface RoomSettings {
   totalRounds: number;
