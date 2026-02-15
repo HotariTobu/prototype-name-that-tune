@@ -96,7 +96,8 @@ export function submitAnswer(
   if (!round) return { correct: false, reason: "no-round" };
 
   const scheme = room.settings.scoringScheme;
-  if (round.winners.length >= scheme.length) return { correct: false, reason: "round-closed" };
+  const maxScorers = Math.min(scheme.length, room.players.length);
+  if (round.winners.length >= maxScorers) return { correct: false, reason: "round-closed" };
   if (round.winners.some((w) => w.playerId === socketId)) return { correct: false, reason: "already-scored" };
 
   round.answered[socketId] = songTitle;
@@ -111,7 +112,7 @@ export function submitAnswer(
     const nickname = player?.nickname ?? "";
     if (player) player.score += points;
     round.winners.push({ playerId: socketId, nickname, points });
-    const allSlotsFilled = round.winners.length >= scheme.length;
+    const allSlotsFilled = round.winners.length >= maxScorers;
     return { correct: true, points, position, allSlotsFilled };
   }
 
