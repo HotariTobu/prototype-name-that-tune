@@ -34,6 +34,19 @@ const server = serve({
   routes: {
     "/*": index,
 
+    "/api/session": {
+      GET(req: Request) {
+        const cookies = req.headers.get("cookie") ?? "";
+        const match = cookies.match(/(?:^|;\s*)ntt-session-id=([^;]+)/);
+        const sessionId = match?.[1] || crypto.randomUUID();
+        const headers: HeadersInit = {};
+        if (!match) {
+          headers["Set-Cookie"] = `ntt-session-id=${sessionId}; HttpOnly; SameSite=Lax; Max-Age=31536000; Path=/`;
+        }
+        return Response.json({ ready: true }, { headers });
+      },
+    },
+
     "/api/token": {
       async GET() {
         if (!hasCredentials()) {

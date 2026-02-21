@@ -25,79 +25,83 @@ export function useSocket(callbacks?: SocketCallbacks) {
   const [answerPending, setAnswerPending] = useState<{ songTitle: string; submittedAt: number } | null>(null);
 
   useEffect(() => {
-    const socket: AppSocket = io({
-      transports: ["websocket"],
-      auth: { sessionId: sessionStorage.getItem("ntt-session-id") || undefined },
-    });
-    socketRef.current = socket;
+    let cancelled = false;
 
-    socket.on("session:id", (id) => {
-      sessionStorage.setItem("ntt-session-id", id);
-    });
-    socket.on("connect", () => setConnected(true));
-    socket.on("disconnect", () => setConnected(false));
-    socket.on("room:error", () => {
-      setRoomState(null);
-      setRound(null);
-      setLobbySongs([]);
-      setPlaySong(null);
-      setWrongAnswer(null);
-      setAnswerPending(null);
-      setScoredPlayers([]);
-    });
-    socket.on("room:state", (state) => {
-      setRoomState(state);
-      if (state.phase === "lobby") {
+    // Ensure session cookie is set before connecting
+    fetch("/api/session").then(() => {
+      if (cancelled) return;
+
+      const socket: AppSocket = io({
+        transports: ["websocket"],
+      });
+      socketRef.current = socket;
+
+      socket.on("connect", () => setConnected(true));
+      socket.on("disconnect", () => setConnected(false));
+      socket.on("room:error", () => {
+        setRoomState(null);
         setRound(null);
+        setLobbySongs([]);
+        setPlaySong(null);
+        setWrongAnswer(null);
+        setAnswerPending(null);
         setScoredPlayers([]);
-      }
-    });
-    socket.on("lobby:songs", (data) => {
-      setLobbySongs(data.songs);
-      callbacksRef.current?.onLobbySongs?.(data.songs);
-    });
-    socket.on("game:songs", (data) => {
-      callbacksRef.current?.onGameSongs?.(data.songs);
-    });
-    socket.on("game:round", (r) => {
-      setRound(r);
-      setPlaySong(null);
-      setWrongAnswer(null);
-      setAnswerPending(null);
-      setScoredPlayers([]);
-      callbacksRef.current?.onGameRound?.(r);
-    });
-    socket.on("game:scored", (data) => {
-      setScoredPlayers((prev) => [...prev, { playerId: data.playerId, nickname: data.nickname, points: data.points }]);
-      setAnswerPending((prev) => prev && data.playerId === socket.id ? null : prev);
-    });
-    socket.on("game:reveal", (data) => {
-      setRound(prev => prev ? { ...prev, revealedSong: data.song, winners: data.winners } : prev);
-      setAnswerPending(null);
-      callbacksRef.current?.onReveal?.();
-    });
-    socket.on("game:extended", (data) => {
-      setRound((prev) => prev ? { ...prev, currentStepIndex: data.currentStepIndex } : prev);
-    });
-    let playSongTimer: ReturnType<typeof setTimeout> | null = null;
-    let wrongAnswerTimer: ReturnType<typeof setTimeout> | null = null;
-    socket.on("game:play-song", (data) => {
-      if (playSongTimer) clearTimeout(playSongTimer);
-      setPlaySong(data);
-      playSongTimer = setTimeout(() => setPlaySong(null), data.duration * 1000);
-    });
-    socket.on("game:wrong-answer", (data) => {
-      if (wrongAnswerTimer) clearTimeout(wrongAnswerTimer);
-      setWrongAnswer(data.songTitle);
-      setAnswerPending(null);
-      wrongAnswerTimer = setTimeout(() => setWrongAnswer(null), 2000);
-    });
-    socket.on("game:finished", () => {
-      // State handled by room:state (phase=finished). Nothing to do here.
+      });
+      socket.on("room:state", (state) => {
+        setRoomState(state);
+        if (state.phase === "lobby") {
+          setRound(null);
+          setScoredPlayers([]);
+        }
+      });
+      socket.on("lobby:songs", (data) => {
+        setLobbySongs(data.songs);
+        callbacksRef.current?.onLobbySongs?.(data.songs);
+      });
+      socket.on("game:songs", (data) => {
+        callbacksRef.current?.onGameSongs?.(data.songs);
+      });
+      socket.on("game:round", (r) => {
+        setRound(r);
+        setPlaySong(null);
+        setWrongAnswer(null);
+        setAnswerPending(null);
+        setScoredPlayers([]);
+        callbacksRef.current?.onGameRound?.(r);
+      });
+      socket.on("game:scored", (data) => {
+        setScoredPlayers((prev) => [...prev, { playerId: data.playerId, nickname: data.nickname, points: data.points }]);
+        setAnswerPending((prev) => prev && data.playerId === socket.id ? null : prev);
+      });
+      socket.on("game:reveal", (data) => {
+        setRound(prev => prev ? { ...prev, revealedSong: data.song, winners: data.winners } : prev);
+        setAnswerPending(null);
+        callbacksRef.current?.onReveal?.();
+      });
+      socket.on("game:extended", (data) => {
+        setRound((prev) => prev ? { ...prev, currentStepIndex: data.currentStepIndex } : prev);
+      });
+      let playSongTimer: ReturnType<typeof setTimeout> | null = null;
+      let wrongAnswerTimer: ReturnType<typeof setTimeout> | null = null;
+      socket.on("game:play-song", (data) => {
+        if (playSongTimer) clearTimeout(playSongTimer);
+        setPlaySong(data);
+        playSongTimer = setTimeout(() => setPlaySong(null), data.duration * 1000);
+      });
+      socket.on("game:wrong-answer", (data) => {
+        if (wrongAnswerTimer) clearTimeout(wrongAnswerTimer);
+        setWrongAnswer(data.songTitle);
+        setAnswerPending(null);
+        wrongAnswerTimer = setTimeout(() => setWrongAnswer(null), 2000);
+      });
+      socket.on("game:finished", () => {
+        // State handled by room:state (phase=finished). Nothing to do here.
+      });
     });
 
     return () => {
-      socket.disconnect();
+      cancelled = true;
+      socketRef.current?.disconnect();
     };
   }, []);
 

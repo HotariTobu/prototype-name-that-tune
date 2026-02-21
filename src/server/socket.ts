@@ -14,11 +14,11 @@ export function registerHandlers(io: IO) {
   });
 
   io.on("connection", (socket: AppSocket) => {
-    // Resolve or generate sessionId
-    const clientSessionId = (socket.handshake.auth as { sessionId?: string }).sessionId;
-    const sessionId = clientSessionId || crypto.randomUUID();
+    // Resolve sessionId from cookie or generate fallback
+    const cookies = socket.handshake.headers.cookie ?? "";
+    const match = cookies.match(/(?:^|;\s*)ntt-session-id=([^;]+)/);
+    const sessionId = match?.[1] || crypto.randomUUID();
     setSessionId(socket.id, sessionId);
-    socket.emit("session:id", sessionId);
     console.log(`connected: ${socket.id} (session: ${sessionId})`);
 
     socket.on("room:create", (_data, cb) => {
@@ -67,8 +67,10 @@ export function registerHandlers(io: IO) {
       if ((result.phase === "playing" || result.phase === "paused") && result.round) {
         const lobbySongsData = getLobbySongs(result.code);
         if (lobbySongsData) socket.emit("lobby:songs", { songs: lobbySongsData });
-        const gameSongs = getRoomSongs(result.code);
-        if (gameSongs) socket.emit("game:songs", { songs: gameSongs });
+        if (isHost(socket.id, result)) {
+          const gameSongs = getRoomSongs(result.code);
+          if (gameSongs) socket.emit("game:songs", { songs: gameSongs });
+        }
         socket.emit("game:round", result.round);
       }
     });

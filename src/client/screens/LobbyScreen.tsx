@@ -12,10 +12,8 @@ interface Props {
   onStart: () => void;
   onLeave: () => void;
   musicKit: {
-    configured: boolean;
     authorized: boolean;
     error: string | null;
-    configure: () => Promise<void>;
     authorize: () => Promise<void>;
     unauthorize: () => Promise<void>;
     searchPlaylists: (term: string) => Promise<any[]>;
@@ -58,12 +56,6 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
       setNicknameError(res.error);
     }
   };
-
-  useEffect(() => {
-    if (isHost && !musicKit.configured) {
-      musicKit.configure();
-    }
-  }, [isHost]);
 
   const openPlaylistDialog = () => {
     dialogRef.current?.showModal();
@@ -246,7 +238,7 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
         <div className="w-full max-w-md">
           <div className="flex items-center justify-between mb-2">
             <h2 className="font-bold">Songs ({lobbySongs.length})</h2>
-            {isHost && musicKit.configured && (
+            {isHost && (
               <button onClick={openPlaylistDialog} className="text-sm text-blue-600 underline">
                 Change Playlist
               </button>
@@ -275,26 +267,22 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
             <p className="text-red-500 text-sm">{musicKit.error}</p>
           )}
 
-          {!musicKit.configured ? (
-            <p className="text-gray-500 text-sm">Configuring MusicKit...</p>
-          ) : (
-            <div className="space-y-2">
-              {!musicKit.authorized ? (
-                <button onClick={musicKit.authorize} className="bg-pink-600 text-white px-4 py-2 rounded w-full">
-                  Authorize Apple Music
-                </button>
-              ) : (
-                <button onClick={musicKit.unauthorize} className="text-sm text-gray-500 underline self-end">
-                  Sign out of Apple Music
-                </button>
-              )}
-              {lobbySongs.length === 0 && (
-                <button onClick={openPlaylistDialog} className="bg-blue-600 text-white px-4 py-2 rounded w-full">
-                  Select Playlist
-                </button>
-              )}
-            </div>
-          )}
+          <div className="space-y-2">
+            {!musicKit.authorized ? (
+              <button onClick={musicKit.authorize} className="bg-pink-600 text-white px-4 py-2 rounded w-full">
+                Authorize Apple Music
+              </button>
+            ) : (
+              <button onClick={musicKit.unauthorize} className="text-sm text-gray-500 underline self-end">
+                Sign out of Apple Music
+              </button>
+            )}
+            {lobbySongs.length === 0 && (
+              <button onClick={openPlaylistDialog} className="bg-blue-600 text-white px-4 py-2 rounded w-full">
+                Select Playlist
+              </button>
+            )}
+          </div>
 
           <div className="space-y-2">
             <label className="block font-bold">

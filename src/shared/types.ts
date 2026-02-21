@@ -67,7 +67,6 @@ export interface ClientToServerEvents {
 }
 
 export interface ServerToClientEvents {
-  "session:id": (sessionId: string) => void;
   "room:state": (state: RoomState) => void;
   "room:error": (error: string) => void;
   "game:round": (round: RoundState) => void;
