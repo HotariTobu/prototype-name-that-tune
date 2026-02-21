@@ -25,8 +25,10 @@ export function setDeletionCallback(cb: (code: string) => void): void {
 
 function scheduleDeletion(code: string): void {
   cancelScheduledDeletion(code);
+  console.log(`[room ${code}] deletion scheduled in ${DELETION_GRACE_MS / 1000}s`);
   const timerId = setTimeout(() => {
     scheduledDeletions.delete(code);
+    console.log(`[room ${code}] grace period expired, deleting room`);
     if (onDeletionExpired) onDeletionExpired(code);
     deleteRoom(code);
   }, DELETION_GRACE_MS);
@@ -38,6 +40,7 @@ export function cancelScheduledDeletion(code: string): boolean {
   if (timerId) {
     clearTimeout(timerId);
     scheduledDeletions.delete(code);
+    console.log(`[room ${code}] scheduled deletion cancelled`);
     return true;
   }
   return false;
