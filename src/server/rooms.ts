@@ -14,6 +14,35 @@ const roomHostSession = new Map<string, string>();
 // roomCode -> (sessionId -> { score, handicapSeconds }) — preserves player state across disconnect
 const playerState = new Map<string, Map<string, { score: number; handicapSeconds: number }>>();
 
+// Scheduled deletion grace period (5 minutes)
+const DELETION_GRACE_MS = 5 * 60 * 1000;
+const scheduledDeletions = new Map<string, ReturnType<typeof setTimeout>>();
+let onDeletionExpired: ((code: string) => void) | null = null;
+
+export function setDeletionCallback(cb: (code: string) => void): void {
+  onDeletionExpired = cb;
+}
+
+function scheduleDeletion(code: string): void {
+  cancelScheduledDeletion(code);
+  const timerId = setTimeout(() => {
+    scheduledDeletions.delete(code);
+    if (onDeletionExpired) onDeletionExpired(code);
+    deleteRoom(code);
+  }, DELETION_GRACE_MS);
+  scheduledDeletions.set(code, timerId);
+}
+
+export function cancelScheduledDeletion(code: string): boolean {
+  const timerId = scheduledDeletions.get(code);
+  if (timerId) {
+    clearTimeout(timerId);
+    scheduledDeletions.delete(code);
+    return true;
+  }
+  return false;
+}
+
 function generateCode(): string {
   let code: string;
   do {
@@ -69,6 +98,7 @@ export function createRoom(hostSocketId: string, sessionId: string): RoomState {
 export function joinRoom(code: string, socketId: string, sessionId: string): RoomState | string {
   const room = rooms.get(code);
   if (!room) return "Room not found";
+  cancelScheduledDeletion(code);
   if (room.players.some((p) => p.id === socketId)) return "Already in room";
 
   if (room.phase !== "lobby") {
@@ -113,6 +143,7 @@ export function setNickname(code: string, socketId: string, nickname: string): R
 }
 
 function deleteRoom(code: string): void {
+  cancelScheduledDeletion(code);
   rooms.delete(code);
   roomNicknames.delete(code);
   nextPlayerNumber.delete(code);
@@ -121,7 +152,7 @@ function deleteRoom(code: string): void {
   playerState.delete(code);
 }
 
-export function leaveRoom(socketId: string): { room: RoomState; wasHost: boolean; paused: boolean; destroyed: boolean } | null {
+export function leaveRoom(socketId: string): { room: RoomState; wasHost: boolean; paused: boolean } | null {
   const code = socketToRoom.get(socketId);
   if (!code) return null;
   const room = rooms.get(code);
@@ -146,22 +177,21 @@ export function leaveRoom(socketId: string): { room: RoomState; wasHost: boolean
   room.players = room.players.filter((p) => p.id !== socketId);
 
   if (room.players.length === 0) {
-    deleteRoom(code);
+    scheduleDeletion(code);
     return null;
   }
 
   if (wasHost) {
     if (room.phase === "playing") {
       room.phase = "paused";
-      return { room, wasHost, paused: true, destroyed: false };
+      return { room, wasHost, paused: true };
     }
-    // Lobby or finished: destroy the room
-    const result = { room, wasHost, paused: false, destroyed: true };
-    deleteRoom(code);
-    return result;
+    // Lobby or finished: schedule deletion with grace period
+    scheduleDeletion(code);
+    return { room, wasHost: true, paused: false };
   }
 
-  return { room, wasHost, paused: false, destroyed: false };
+  return { room, wasHost, paused: false };
 }
 
 export function saveGameParticipants(code: string): void {

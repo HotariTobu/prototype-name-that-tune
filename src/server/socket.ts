@@ -1,12 +1,18 @@
 import type { Server, Socket } from "socket.io";
 import type { ClientToServerEvents, ServerToClientEvents } from "../shared/types.ts";
-import { createRoom, joinRoom, leaveRoom, getRoom, getRoomBySocket, updateSettings, isHost, setNickname, setHandicap, saveGameParticipants, isGameParticipant, getSessionId, setSessionId } from "./rooms.ts";
+import { createRoom, joinRoom, leaveRoom, getRoom, getRoomBySocket, updateSettings, isHost, setNickname, setHandicap, saveGameParticipants, isGameParticipant, getSessionId, setSessionId, setDeletionCallback } from "./rooms.ts";
 import { startGame, submitAnswer, extendDuration, canAdvanceRound, startRound, getSongForRound, endGame, resetToLobby, getRoomSongs, setLobbySongs, getLobbySongs, addPendingAnswer, cancelPendingAnswer, cancelAllPendingAnswers } from "./game.ts";
 
 type IO = Server<ClientToServerEvents, ServerToClientEvents>;
 type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 export function registerHandlers(io: IO) {
+  setDeletionCallback((code) => {
+    cancelAllPendingAnswers(code);
+    io.to(code).emit("room:error", "Room closed due to inactivity");
+    io.in(code).socketsLeave(code);
+  });
+
   io.on("connection", (socket: AppSocket) => {
     // Resolve or generate sessionId
     const clientSessionId = (socket.handshake.auth as { sessionId?: string }).sessionId;
@@ -66,15 +72,8 @@ export function registerHandlers(io: IO) {
       const result = leaveRoom(socket.id);
       if (result) {
         if (roomCode) socket.leave(roomCode);
-        if (result.paused) {
-          cancelAllPendingAnswers(result.room.code);
-        }
-        if (result.destroyed) {
-          io.to(result.room.code).emit("room:error", "Host left the room");
-          io.in(result.room.code).socketsLeave(result.room.code);
-        } else {
-          io.to(result.room.code).emit("room:state", result.room);
-        }
+        if (result.paused) cancelAllPendingAnswers(result.room.code);
+        io.to(result.room.code).emit("room:state", result.room);
       } else if (roomCode) {
         socket.leave(roomCode);
       }
@@ -258,16 +257,8 @@ export function registerHandlers(io: IO) {
       if (room) cancelPendingAnswer(room.code, socket.id);
       const result = leaveRoom(socket.id);
       if (result) {
-        if (result.paused) {
-          cancelAllPendingAnswers(result.room.code);
-        }
-        if (result.destroyed) {
-          // Host left in lobby/finished: notify remaining players and kick them
-          io.to(result.room.code).emit("room:error", "Host left the room");
-          io.in(result.room.code).socketsLeave(result.room.code);
-        } else {
-          io.to(result.room.code).emit("room:state", result.room);
-        }
+        if (result.paused) cancelAllPendingAnswers(result.room.code);
+        io.to(result.room.code).emit("room:state", result.room);
       }
     });
   });
