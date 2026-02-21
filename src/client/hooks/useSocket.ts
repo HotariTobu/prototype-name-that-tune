@@ -1,20 +1,26 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { io, type Socket } from "socket.io-client";
-import type { ClientToServerEvents, ServerToClientEvents, RoomState, RoundState, Song, Player, RoundWinner } from "../../shared/types.ts";
+import type { ClientToServerEvents, ServerToClientEvents, RoomState, RoundState, Song, RoundWinner } from "../../shared/types.ts";
 
 type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
-export function useSocket() {
+interface SocketCallbacks {
+  onLobbySongs?: (songs: Song[]) => void;
+  onGameSongs?: (songs: Song[]) => void;
+  onGameRound?: (round: RoundState) => void;
+  onReveal?: () => void;
+}
+
+export function useSocket(callbacks?: SocketCallbacks) {
+  const callbacksRef = useRef(callbacks);
+  callbacksRef.current = callbacks;
   const socketRef = useRef<AppSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [round, setRound] = useState<RoundState | null>(null);
-  const [reveal, setReveal] = useState<{ song: Song; winners: RoundWinner[] } | null>(null);
   const [scoredPlayers, setScoredPlayers] = useState<RoundWinner[]>([]);
   const [playSong, setPlaySong] = useState<{ songIndex: number; duration: number } | null>(null);
-  const [finished, setFinished] = useState<Player[] | null>(null);
   const [wrongAnswer, setWrongAnswer] = useState<string | null>(null);
-  const [songs, setSongs] = useState<Song[]>([]);
   const [lobbySongs, setLobbySongs] = useState<Song[]>([]);
   const [answerPending, setAnswerPending] = useState<{ songTitle: string; submittedAt: number } | null>(null);
 
@@ -33,9 +39,6 @@ export function useSocket() {
     socket.on("room:error", () => {
       setRoomState(null);
       setRound(null);
-      setReveal(null);
-      setFinished(null);
-      setSongs([]);
       setLobbySongs([]);
       setPlaySong(null);
       setWrongAnswer(null);
@@ -46,42 +49,52 @@ export function useSocket() {
       setRoomState(state);
       if (state.phase === "lobby") {
         setRound(null);
-        setReveal(null);
-        setFinished(null);
-        setSongs([]);
-        setLobbySongs([]);
         setScoredPlayers([]);
-      } else {
-        setLobbySongs([]);
       }
     });
-    socket.on("lobby:songs", (data) => setLobbySongs(data.songs));
-    socket.on("game:songs", (data) => setSongs(data.songs));
+    socket.on("lobby:songs", (data) => {
+      setLobbySongs(data.songs);
+      callbacksRef.current?.onLobbySongs?.(data.songs);
+    });
+    socket.on("game:songs", (data) => {
+      callbacksRef.current?.onGameSongs?.(data.songs);
+    });
     socket.on("game:round", (r) => {
       setRound(r);
-      setReveal(null);
       setPlaySong(null);
       setWrongAnswer(null);
       setAnswerPending(null);
       setScoredPlayers([]);
+      callbacksRef.current?.onGameRound?.(r);
     });
     socket.on("game:scored", (data) => {
       setScoredPlayers((prev) => [...prev, { playerId: data.playerId, nickname: data.nickname, points: data.points }]);
       setAnswerPending((prev) => prev && data.playerId === socket.id ? null : prev);
     });
     socket.on("game:reveal", (data) => {
-      setReveal(data);
+      setRound(prev => prev ? { ...prev, revealedSong: data.song, winners: data.winners } : prev);
       setAnswerPending(null);
+      callbacksRef.current?.onReveal?.();
     });
     socket.on("game:extended", (data) => {
       setRound((prev) => prev ? { ...prev, currentStepIndex: data.currentStepIndex } : prev);
     });
-    socket.on("game:play-song", (data) => setPlaySong(data));
+    let playSongTimer: ReturnType<typeof setTimeout> | null = null;
+    let wrongAnswerTimer: ReturnType<typeof setTimeout> | null = null;
+    socket.on("game:play-song", (data) => {
+      if (playSongTimer) clearTimeout(playSongTimer);
+      setPlaySong(data);
+      playSongTimer = setTimeout(() => setPlaySong(null), data.duration * 1000);
+    });
     socket.on("game:wrong-answer", (data) => {
+      if (wrongAnswerTimer) clearTimeout(wrongAnswerTimer);
       setWrongAnswer(data.songTitle);
       setAnswerPending(null);
+      wrongAnswerTimer = setTimeout(() => setWrongAnswer(null), 2000);
     });
-    socket.on("game:finished", (data) => setFinished(data.players));
+    socket.on("game:finished", () => {
+      // State handled by room:state (phase=finished). Nothing to do here.
+    });
 
     return () => {
       socket.disconnect();
@@ -110,9 +123,6 @@ export function useSocket() {
     socketRef.current?.emit("room:leave");
     setRoomState(null);
     setRound(null);
-    setReveal(null);
-    setFinished(null);
-    setSongs([]);
     setLobbySongs([]);
     setPlaySong(null);
     setWrongAnswer(null);
@@ -140,8 +150,8 @@ export function useSocket() {
     socketRef.current?.emit("lobby:songs", { songs });
   }, []);
 
-  const startGame = useCallback((songs: Song[]) => {
-    socketRef.current?.emit("game:start", { songs });
+  const startGame = useCallback(() => {
+    socketRef.current?.emit("game:start");
   }, []);
 
   const play = useCallback(() => {
@@ -181,11 +191,8 @@ export function useSocket() {
     connected,
     roomState,
     round,
-    reveal,
     playSong,
-    finished,
     wrongAnswer,
-    songs,
     lobbySongs,
     createRoom,
     checkRoom,

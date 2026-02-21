@@ -56,7 +56,7 @@ export interface ClientToServerEvents {
   "room:handicap": (data: { seconds: number }, callback: (res: { ok: true } | { ok: false; error: string }) => void) => void;
   "room:settings": (data: Partial<RoomSettings>) => void;
   "lobby:songs": (data: { songs: Song[] }) => void;
-  "game:start": (data: { songs: Song[] }) => void;
+  "game:start": () => void;
   "game:play": () => void;
   "game:answer": (data: { songId: string; songTitle: string }) => void;
   "game:extend": () => void;

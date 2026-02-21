@@ -9,7 +9,7 @@ interface Props {
   onSetHandicap: (seconds: number) => Promise<{ ok: true } | { ok: false; error: string }>;
   onUpdateSettings: (settings: any) => void;
   onSendLobbySongs: (songs: Song[]) => void;
-  onStart: (songs: Song[]) => void;
+  onStart: () => void;
   onLeave: () => void;
   musicKit: {
     configured: boolean;
@@ -30,7 +30,6 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
   const myPlayer = room.players.find((p) => p.id === mySocketId);
   const [nickname, setNickname] = useState(myPlayer?.nickname ?? "");
   const [nicknameError, setNicknameError] = useState("");
-  const [songs, setSongs] = useState<Song[]>([]);
   const [unlimited, setUnlimited] = useState(room.settings.totalRounds === 0);
   const [rounds, setRounds] = useState(room.settings.totalRounds || 10);
   const [durationStepsInput, setDurationStepsInput] = useState(room.settings.durationSteps.join(", "));
@@ -85,7 +84,6 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
     const fetchedSongs = playlistSource === "library"
       ? await musicKit.getLibraryPlaylistSongs(playlist.id)
       : await musicKit.getPlaylistSongs(playlist.id);
-    setSongs(fetchedSongs);
     setLoadingSongs(false);
     onUpdateSettings({ playlistId: playlist.id, playlistName: playlist.name });
     onSendLobbySongs(fetchedSongs);
@@ -134,7 +132,6 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
         setLoadingSongs(false);
         return;
       }
-      setSongs(fetchedSongs);
       onUpdateSettings({ playlistId: id, playlistName: `Playlist (${id})` });
       onSendLobbySongs(fetchedSongs);
       closePlaylistDialog();
@@ -146,8 +143,7 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
   };
 
   const handleStart = () => {
-    if (songs.length === 0) return;
-    const shuffled = [...songs].sort(() => Math.random() - 0.5);
+    if (lobbySongs.length === 0) return;
     const parsedSteps = durationStepsInput
       .split(",")
       .map((s) => Number(s.trim()))
@@ -159,15 +155,13 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
       .filter((n) => !isNaN(n) && n > 0);
     const scoring = parsedScoring.length > 0 ? parsedScoring : [4, 2, 1];
     onUpdateSettings({
-      totalRounds: unlimited ? 0 : Math.min(rounds, shuffled.length),
+      totalRounds: unlimited ? 0 : Math.min(rounds, lobbySongs.length),
       durationSteps: steps,
       scoringScheme: scoring,
     });
-    onStart(shuffled);
+    onStart();
   };
 
-  // Use lobbySongs for display (shared with all players)
-  const displaySongs = lobbySongs.length > 0 ? lobbySongs : songs;
 
   return (
     <div className="flex flex-col items-center min-h-screen p-4 gap-4">
@@ -248,10 +242,10 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
       </div>
 
       {/* Song list - visible to all players */}
-      {displaySongs.length > 0 && (
+      {lobbySongs.length > 0 && (
         <div className="w-full max-w-md">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="font-bold">Songs ({displaySongs.length})</h2>
+            <h2 className="font-bold">Songs ({lobbySongs.length})</h2>
             {isHost && musicKit.configured && (
               <button onClick={openPlaylistDialog} className="text-sm text-blue-600 underline">
                 Change Playlist
@@ -259,7 +253,7 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
             )}
           </div>
           <ul className="space-y-1 max-h-60 overflow-y-auto border rounded p-2 bg-white">
-            {displaySongs.map((song, i) => (
+            {lobbySongs.map((song, i) => (
               <li key={song.id} className="flex items-center gap-2 text-sm">
                 <span className="text-gray-400 w-6 text-right shrink-0">{i + 1}</span>
                 {song.artworkUrl && (
@@ -294,7 +288,7 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
                   Sign out of Apple Music
                 </button>
               )}
-              {displaySongs.length === 0 && (
+              {lobbySongs.length === 0 && (
                 <button onClick={openPlaylistDialog} className="bg-blue-600 text-white px-4 py-2 rounded w-full">
                   Select Playlist
                 </button>
@@ -338,7 +332,7 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
                 <input
                   type="range"
                   min={1}
-                  max={Math.max(songs.length, 20)}
+                  max={Math.max(lobbySongs.length, 20)}
                   value={rounds}
                   onChange={(e) => setRounds(Number(e.target.value))}
                   className="w-full"
@@ -349,7 +343,7 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
 
           <button
             onClick={handleStart}
-            disabled={songs.length === 0}
+            disabled={lobbySongs.length === 0}
             className="bg-green-600 text-white px-6 py-3 rounded w-full text-lg font-bold disabled:opacity-50"
           >
             Start Game
@@ -357,10 +351,10 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
         </div>
       )}
 
-      {!isHost && displaySongs.length === 0 && (
+      {!isHost && lobbySongs.length === 0 && (
         <p className="text-gray-500">Waiting for the host to select a playlist...</p>
       )}
-      {!isHost && displaySongs.length > 0 && (
+      {!isHost && lobbySongs.length > 0 && (
         <p className="text-gray-500">Waiting for the host to start the game...</p>
       )}
 

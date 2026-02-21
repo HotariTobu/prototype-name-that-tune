@@ -1,14 +1,14 @@
 import type { Server, Socket } from "socket.io";
 import type { ClientToServerEvents, ServerToClientEvents } from "../shared/types.ts";
 import { createRoom, joinRoom, leaveRoom, getRoom, getRoomBySocket, updateSettings, isHost, setNickname, setHandicap, saveGameParticipants, isGameParticipant, getSessionId, setSessionId, setDeletionCallback } from "./rooms.ts";
-import { startGame, submitAnswer, extendDuration, canAdvanceRound, startRound, getSongForRound, endGame, resetToLobby, getRoomSongs, setLobbySongs, getLobbySongs, addPendingAnswer, cancelPendingAnswer, cancelAllPendingAnswers } from "./game.ts";
+import { startGame, submitAnswer, extendDuration, canAdvanceRound, startRound, getSongForRound, endGame, resetToLobby, getRoomSongs, setLobbySongs, getLobbySongs, shuffleAndSetRoomSongs, addPendingAnswer, cancelPendingAnswer, cancelAllPendingAnswers, cleanupRoom } from "./game.ts";
 
 type IO = Server<ClientToServerEvents, ServerToClientEvents>;
 type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 export function registerHandlers(io: IO) {
   setDeletionCallback((code) => {
-    cancelAllPendingAnswers(code);
+    cleanupRoom(code);
     io.to(code).emit("room:error", "Room closed due to inactivity");
     io.in(code).socketsLeave(code);
   });
@@ -56,12 +56,19 @@ export function registerHandlers(io: IO) {
       if (result.phase === "lobby") {
         const songs = getLobbySongs(result.code);
         if (songs) socket.emit("lobby:songs", { songs });
+        // Send shuffled songs to host for preloading
+        if (isHost(socket.id, result)) {
+          const shuffled = getRoomSongs(result.code);
+          if (shuffled) socket.emit("game:songs", { songs: shuffled });
+        }
       }
 
       // If game is in progress, send current state to the rejoining player
-      if (result.phase === "playing" && result.round) {
-        const songs = getRoomSongs(result.code);
-        if (songs) socket.emit("game:songs", { songs });
+      if ((result.phase === "playing" || result.phase === "paused") && result.round) {
+        const lobbySongsData = getLobbySongs(result.code);
+        if (lobbySongsData) socket.emit("lobby:songs", { songs: lobbySongsData });
+        const gameSongs = getRoomSongs(result.code);
+        if (gameSongs) socket.emit("game:songs", { songs: gameSongs });
         socket.emit("game:round", result.round);
       }
     });
@@ -118,6 +125,8 @@ export function registerHandlers(io: IO) {
       if (!room || !isHost(socket.id, room) || room.phase !== "lobby") return;
       setLobbySongs(room.code, songs);
       io.to(room.code).emit("lobby:songs", { songs });
+      const shuffled = shuffleAndSetRoomSongs(room.code);
+      if (shuffled) socket.emit("game:songs", { songs: shuffled });
     });
 
     socket.on("room:settings", (settings) => {
@@ -127,12 +136,12 @@ export function registerHandlers(io: IO) {
       io.to(room.code).emit("room:state", room);
     });
 
-    socket.on("game:start", ({ songs }) => {
+    socket.on("game:start", () => {
       const room = getRoomBySocket(socket.id);
       if (!room || !isHost(socket.id, room)) return;
+      if (!getRoomSongs(room.code)) return;
       saveGameParticipants(room.code);
-      const round = startGame(room, songs);
-      io.to(room.code).emit("game:songs", { songs });
+      const round = startGame(room);
       io.to(room.code).emit("room:state", room);
       io.to(room.code).emit("game:round", round);
     });
@@ -177,6 +186,7 @@ export function registerHandlers(io: IO) {
           if (result.allSlotsFilled) {
             cancelAllPendingAnswers(currentRoom.code);
             const song = getSongForRound(currentRoom.code, currentRoom.round.roundNumber);
+            currentRoom.round.revealedSong = song!;
             io.to(currentRoom.code).emit("game:reveal", {
               song: song!,
               winners: currentRoom.round.winners,
@@ -213,6 +223,7 @@ export function registerHandlers(io: IO) {
       cancelAllPendingAnswers(room.code);
       const song = getSongForRound(room.code, room.round.roundNumber);
       if (song) {
+        room.round.revealedSong = song;
         io.to(room.code).emit("game:reveal", {
           song,
           winners: room.round.winners,
@@ -249,6 +260,9 @@ export function registerHandlers(io: IO) {
       if (!room || !isHost(socket.id, room)) return;
       resetToLobby(room);
       io.to(room.code).emit("room:state", room);
+      // Send re-shuffled songs to host for preloading
+      const shuffled = getRoomSongs(room.code);
+      if (shuffled) socket.emit("game:songs", { songs: shuffled });
     });
 
     socket.on("disconnect", () => {

@@ -53,10 +53,17 @@ export function getLobbySongs(roomCode: string): Song[] | undefined {
   return lobbySongs.get(roomCode);
 }
 
-export function startGame(room: RoomState, songs: Song[]): RoundState {
+export function shuffleAndSetRoomSongs(roomCode: string): Song[] | undefined {
+  const songs = lobbySongs.get(roomCode);
+  if (!songs || songs.length === 0) return undefined;
+  const shuffled = [...songs].sort(() => Math.random() - 0.5);
+  roomSongs.set(roomCode, shuffled);
+  return shuffled;
+}
+
+export function startGame(room: RoomState): RoundState {
   room.phase = "playing";
   room.players.forEach((p) => (p.score = 0));
-  roomSongs.set(room.code, songs);
   return startRound(room, 1);
 }
 
@@ -139,7 +146,13 @@ export function endGame(room: RoomState): void {
   room.phase = "finished";
   cancelAllPendingAnswers(room.code);
   roomSongs.delete(room.code);
-  lobbySongs.delete(room.code);
+  // Keep lobbySongs so back-to-lobby can re-shuffle
+}
+
+export function cleanupRoom(roomCode: string): void {
+  cancelAllPendingAnswers(roomCode);
+  roomSongs.delete(roomCode);
+  lobbySongs.delete(roomCode);
 }
 
 export function resetToLobby(room: RoomState): void {
@@ -147,6 +160,6 @@ export function resetToLobby(room: RoomState): void {
   room.round = null;
   room.players.forEach((p) => (p.score = 0));
   cancelAllPendingAnswers(room.code);
-  roomSongs.delete(room.code);
-  lobbySongs.delete(room.code);
+  // Re-shuffle songs for next game, keep lobbySongs intact
+  shuffleAndSetRoomSongs(room.code);
 }

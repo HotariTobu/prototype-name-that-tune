@@ -7,8 +7,22 @@ import { RoomScreen } from "./client/screens/RoomScreen.tsx";
 
 export function App() {
   const { route, navigate } = useRouter();
-  const socket = useSocket();
   const musicKit = useMusicKit();
+  const socket = useSocket({
+    onGameSongs: (songs) => {
+      musicKit.prepareQueue(songs);
+    },
+    onGameRound: (round) => {
+      musicKit.stop();
+      musicKit.loadSong(round.roundNumber - 1);
+      if (round.revealedSong) {
+        musicKit.playFullSong();
+      }
+    },
+    onReveal: () => {
+      musicKit.playFullSong();
+    },
+  });
   const isHost = useMemo(() => {
     if (!socket.roomState || !socket.socket?.id) return false;
     return socket.roomState.players.some((p) => p.id === socket.socket?.id && p.isHost);

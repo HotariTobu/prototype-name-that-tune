@@ -10,6 +10,7 @@ interface Props {
 
 export function ResultScreen({ players, mySocketId, isHost, onBackToLobby, onLeave }: Props) {
   const sorted = [...players].sort((a, b) => b.score - a.score);
+  const getRank = (i: number): number => i === 0 || sorted[i]!.score !== sorted[i - 1]!.score ? i + 1 : getRank(i - 1);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 gap-6">
@@ -19,11 +20,11 @@ export function ResultScreen({ players, mySocketId, isHost, onBackToLobby, onLea
           <div
             key={p.id}
             className={`flex justify-between items-center p-3 rounded ${
-              i === 0 ? "bg-yellow-100 border-2 border-yellow-400" : "bg-gray-100"
+              getRank(i) === 1 ? "bg-yellow-100 border-2 border-yellow-400" : "bg-gray-100"
             }`}
           >
             <span className="flex items-center gap-2">
-              <span className="font-mono text-lg w-6">{i + 1}.</span>
+              <span className="font-mono text-lg w-6">{getRank(i)}.</span>
               <span className="font-bold">
                 {p.nickname}
                 {p.id === mySocketId ? " (you)" : ""}

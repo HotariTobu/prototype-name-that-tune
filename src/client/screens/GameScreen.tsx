@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Fuse from "fuse.js";
 import type { RoomState, RoundState, Song, RoundWinner } from "../../shared/types.ts";
 
@@ -18,11 +18,12 @@ interface Props {
   onEnd: () => void;
   onLeave: () => void;
   musicKit: {
-    searchSongs: (term: string) => Promise<Song[]>;
-    playSong: (song: Song, duration: number) => void;
-    playFullSong: (song: Song) => void;
+    playSong: (duration: number) => void;
     stop: () => void;
     playing: boolean;
+    preparing: boolean;
+    loading: boolean;
+    cleanup: () => void;
   };
   songs: Song[];
   wrongAnswer: string | null;
@@ -34,32 +35,13 @@ export function GameScreen({
   onPlay, onAnswer, onExtend, onCloseAnswers, onNext, onEnd, onLeave,
   musicKit, songs, wrongAnswer, answerPending,
 }: Props) {
-  const [query, setQuery] = useState("");
-  const [suggestions, setSuggestions] = useState<Song[]>([]);
-  const [remotePlayingIndicator, setRemotePlayingIndicator] = useState(false);
-  const [wrongFeedback, setWrongFeedback] = useState<string | null>(null);
   const [pendingCountdown, setPendingCountdown] = useState<number | null>(null);
 
-  const isPlaying = isHost ? musicKit.playing : remotePlayingIndicator;
+  const isPlaying = isHost ? musicKit.playing : playSongEvent !== null;
 
   useEffect(() => {
-    setQuery("");
-    setSuggestions([]);
-    setWrongFeedback(null);
-    if (isHost) musicKit.stop();
-  }, [round.roundNumber]);
-
-  useEffect(() => {
-    return () => { musicKit.stop(); };
+    return () => { musicKit.cleanup(); };
   }, []);
-
-  useEffect(() => {
-    if (wrongAnswer) {
-      setWrongFeedback(wrongAnswer);
-      const timer = setTimeout(() => setWrongFeedback(null), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [wrongAnswer]);
 
   const myPlayer = room.players.find((p) => p.id === mySocketId);
   const myHandicap = myPlayer?.handicapSeconds ?? 0;
@@ -81,26 +63,13 @@ export function GameScreen({
     return () => clearInterval(interval);
   }, [answerPending, myHandicap]);
 
-  // Show "Playing..." for non-host players (timer-based, no actual audio)
-  useEffect(() => {
-    if (!playSongEvent || isHost) return;
-    setRemotePlayingIndicator(true);
-    const timer = setTimeout(() => setRemotePlayingIndicator(false), playSongEvent.duration * 1000);
-    return () => clearTimeout(timer);
-  }, [playSongEvent, isHost]);
-
-  // Play full song on reveal (host only), loop until next round
-  useEffect(() => {
-    if (!reveal || !isHost) return;
-    musicKit.playFullSong(reveal.song);
-  }, [reveal]);
-
   const duration = room.settings.durationSteps[round.currentStepIndex] ?? 1;
-  const currentSong = songs[round.roundNumber - 1];
+
+  const songReady = !musicKit.preparing && !musicKit.loading;
 
   const handlePlay = () => {
-    if (!currentSong || isPlaying) return;
-    musicKit.playSong(currentSong, duration);
+    if (isPlaying || !songReady) return;
+    musicKit.playSong(duration);
     onPlay();
   };
 
@@ -113,22 +82,6 @@ export function GameScreen({
     () => new Fuse(songs, { keys: ["title"], threshold: 0.4 }),
     [songs]
   );
-
-  const handleSearch = useCallback((term: string) => {
-    setQuery(term);
-    if (term.length < 1) {
-      setSuggestions([]);
-      return;
-    }
-    setSuggestions(fuse.search(term, { limit: 10 }).map((r) => r.item));
-  }, [fuse]);
-
-  const handleSelect = (song: Song) => {
-    if (reveal) return;
-    onAnswer(song.id, song.title);
-    setSuggestions([]);
-    setQuery("");
-  };
 
   return (
     <div className="flex flex-col min-h-screen p-4 gap-4">
@@ -163,14 +116,14 @@ export function GameScreen({
           <div className="flex gap-2">
             <button
               onClick={handlePlay}
-              disabled={isPlaying}
+              disabled={isPlaying || !songReady}
               className="bg-blue-600 text-white px-4 py-2 rounded flex-1 disabled:opacity-50"
             >
-              Play
+              {musicKit.preparing ? "Preparing..." : musicKit.loading ? "Loading..." : "Play"}
             </button>
             <button
               onClick={handleExtend}
-              disabled={isPlaying || round.currentStepIndex >= room.settings.durationSteps.length - 1}
+              disabled={isPlaying || !songReady || round.currentStepIndex >= room.settings.durationSteps.length - 1}
               className="bg-orange-500 text-white px-4 py-2 rounded disabled:opacity-50"
             >
               Extend
@@ -218,71 +171,19 @@ export function GameScreen({
           )}
         </div>
       ) : (
-        <div className="space-y-2">
-          {scoredPlayers.length > 0 && (
-            <div className="space-y-1">
-              {scoredPlayers.map((w, i) => (
-                <div key={w.playerId} className="bg-green-50 border border-green-200 rounded p-2 text-center text-sm">
-                  <span className="text-green-700 font-bold">{w.nickname}</span> scored {w.points}pt{w.points !== 1 ? "s" : ""}! ({i + 1}{i === 0 ? "st" : i === 1 ? "nd" : i === 2 ? "rd" : "th"})
-                </div>
-              ))}
-            </div>
-          )}
-          {myScore ? (
-            <div className="bg-blue-50 border border-blue-200 rounded p-4 text-center">
-              <p className="text-blue-700 font-bold text-lg">You scored {myScore.points} point{myScore.points !== 1 ? "s" : ""}!</p>
-            </div>
-          ) : (
-            <>
-              {answerPending && pendingCountdown !== null && pendingCountdown > 0 && (
-                <div className="bg-yellow-50 border border-yellow-300 rounded p-3 text-center">
-                  <p className="text-yellow-700 text-sm">
-                    "{answerPending.songTitle}" — checking in {pendingCountdown.toFixed(1)}s
-                  </p>
-                  <div className="mt-1 h-1.5 bg-yellow-200 rounded overflow-hidden">
-                    <div
-                      className="h-full bg-yellow-500 transition-all duration-100"
-                      style={{ width: `${(pendingCountdown / myHandicap) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-              {wrongFeedback && (
-                <p className="text-center text-red-500 font-bold">
-                  Wrong: {wrongFeedback}
-                </p>
-              )}
-              <input
-                type="text"
-                placeholder="Type the song title..."
-                value={query}
-                onChange={(e) => handleSearch(e.target.value)}
-                className="border p-2 rounded w-full"
-                autoFocus
-              />
-              {suggestions.length > 0 && (
-                <ul className="border rounded max-h-60 overflow-y-auto">
-                  {suggestions.map((s) => (
-                    <li key={s.id}>
-                      <button
-                        onClick={() => handleSelect(s)}
-                        className="w-full text-left p-2 hover:bg-blue-50 flex items-center gap-2"
-                      >
-                        {s.artworkUrl && (
-                          <img src={s.artworkUrl} alt="" className="w-10 h-10 rounded" />
-                        )}
-                        <div>
-                          <p className="font-medium">{s.title}</p>
-                          <p className="text-sm text-gray-500">{s.artist}</p>
-                        </div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </>
-          )}
-        </div>
+        <SearchSection
+          key={round.roundNumber}
+          songs={songs}
+          fuse={fuse}
+          scoredPlayers={scoredPlayers}
+          myScore={myScore}
+          answerPending={answerPending}
+          pendingCountdown={pendingCountdown}
+          myHandicap={myHandicap}
+          wrongAnswer={wrongAnswer}
+          reveal={reveal}
+          onAnswer={onAnswer}
+        />
       )}
 
       <div className="mt-auto">
@@ -291,11 +192,13 @@ export function GameScreen({
         </button>
         <h3 className="font-bold text-sm mb-1">Scoreboard</h3>
         <ul className="text-sm space-y-1">
-          {[...room.players]
-            .sort((a, b) => b.score - a.score)
-            .map((p) => (
+          {(() => {
+            const sorted = [...room.players].sort((a, b) => b.score - a.score);
+            const getRank = (i: number): number => i === 0 || sorted[i]!.score !== sorted[i - 1]!.score ? i + 1 : getRank(i - 1);
+            return sorted.map((p, i) => (
               <li key={p.id} className="flex justify-between">
                 <span>
+                  <span className="font-mono text-xs text-gray-400 w-5 inline-block">{getRank(i)}.</span>
                   {p.nickname}
                   {p.id === mySocketId ? " (you)" : ""}
                   {p.handicapSeconds > 0 && (
@@ -304,9 +207,113 @@ export function GameScreen({
                 </span>
                 <span className="font-mono">{p.score}</span>
               </li>
-            ))}
+            ));
+          })()}
         </ul>
       </div>
+    </div>
+  );
+}
+
+function SearchSection({
+  songs, fuse, scoredPlayers, myScore, answerPending, pendingCountdown,
+  myHandicap, wrongAnswer, reveal, onAnswer,
+}: {
+  songs: Song[];
+  fuse: Fuse<Song>;
+  scoredPlayers: RoundWinner[];
+  myScore: RoundWinner | undefined;
+  answerPending: { songTitle: string; submittedAt: number } | null;
+  pendingCountdown: number | null;
+  myHandicap: number;
+  wrongAnswer: string | null;
+  reveal: { song: Song; winners: RoundWinner[] } | null;
+  onAnswer: (songId: string, songTitle: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [suggestions, setSuggestions] = useState<Song[]>([]);
+
+  const handleSearch = (term: string) => {
+    setQuery(term);
+    if (term.length < 1) {
+      setSuggestions([]);
+      return;
+    }
+    setSuggestions(fuse.search(term, { limit: 10 }).map((r) => r.item));
+  };
+
+  const handleSelect = (song: Song) => {
+    if (reveal) return;
+    onAnswer(song.id, song.title);
+    setSuggestions([]);
+    setQuery("");
+  };
+
+  return (
+    <div className="space-y-2">
+      {scoredPlayers.length > 0 && (
+        <div className="space-y-1">
+          {scoredPlayers.map((w, i) => (
+            <div key={w.playerId} className="bg-green-50 border border-green-200 rounded p-2 text-center text-sm">
+              <span className="text-green-700 font-bold">{w.nickname}</span> scored {w.points}pt{w.points !== 1 ? "s" : ""}! ({i + 1}{i === 0 ? "st" : i === 1 ? "nd" : i === 2 ? "rd" : "th"})
+            </div>
+          ))}
+        </div>
+      )}
+      {myScore ? (
+        <div className="bg-blue-50 border border-blue-200 rounded p-4 text-center">
+          <p className="text-blue-700 font-bold text-lg">You scored {myScore.points} point{myScore.points !== 1 ? "s" : ""}!</p>
+        </div>
+      ) : (
+        <>
+          {answerPending && pendingCountdown !== null && pendingCountdown > 0 && (
+            <div className="bg-yellow-50 border border-yellow-300 rounded p-3 text-center">
+              <p className="text-yellow-700 text-sm">
+                "{answerPending.songTitle}" — checking in {pendingCountdown.toFixed(1)}s
+              </p>
+              <div className="mt-1 h-1.5 bg-yellow-200 rounded overflow-hidden">
+                <div
+                  className="h-full bg-yellow-500 transition-all duration-100"
+                  style={{ width: `${(pendingCountdown / myHandicap) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+          {wrongAnswer && (
+            <p className="text-center text-red-500 font-bold">
+              Wrong: {wrongAnswer}
+            </p>
+          )}
+          <input
+            type="text"
+            placeholder="Type the song title..."
+            value={query}
+            onChange={(e) => handleSearch(e.target.value)}
+            className="border p-2 rounded w-full"
+            autoFocus
+          />
+          {suggestions.length > 0 && (
+            <ul className="border rounded max-h-60 overflow-y-auto">
+              {suggestions.map((s) => (
+                <li key={s.id}>
+                  <button
+                    onClick={() => handleSelect(s)}
+                    className="w-full text-left p-2 hover:bg-blue-50 flex items-center gap-2"
+                  >
+                    {s.artworkUrl && (
+                      <img src={s.artworkUrl} alt="" className="w-10 h-10 rounded" />
+                    )}
+                    <div>
+                      <p className="font-medium">{s.title}</p>
+                      <p className="text-sm text-gray-500">{s.artist}</p>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
     </div>
   );
 }

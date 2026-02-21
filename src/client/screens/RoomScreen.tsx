@@ -12,10 +12,8 @@ interface Props {
     socket: { id: string | undefined } | null;
     roomState: import("../../shared/types.ts").RoomState | null;
     round: import("../../shared/types.ts").RoundState | null;
-    reveal: { song: Song; winners: import("../../shared/types.ts").RoundWinner[] } | null;
     scoredPlayers: import("../../shared/types.ts").RoundWinner[];
     playSong: { songIndex: number; duration: number } | null;
-    finished: import("../../shared/types.ts").Player[] | null;
     checkRoom: (code: string) => Promise<{ exists: boolean }>;
     joinRoom: (code: string) => Promise<{ ok: true } | { ok: false; error: string }>;
     leaveRoom: () => void;
@@ -23,7 +21,7 @@ interface Props {
     setHandicap: (seconds: number) => Promise<{ ok: true } | { ok: false; error: string }>;
     updateSettings: (settings: any) => void;
     sendLobbySongs: (songs: Song[]) => void;
-    startGame: (songs: Song[]) => void;
+    startGame: () => void;
     play: () => void;
     answer: (songId: string, songTitle: string) => void;
     extend: () => void;
@@ -32,7 +30,6 @@ interface Props {
     endGame: () => void;
     backToLobby: () => void;
     wrongAnswer: string | null;
-    songs: Song[];
     lobbySongs: Song[];
     answerPending: { songTitle: string; submittedAt: number } | null;
   };
@@ -110,15 +107,15 @@ export function RoomScreen({ roomCode, navigate, socket, isHost, musicKit }: Pro
 
   const room = socket.roomState!;
 
-  const handleStart = (songs: Song[]) => {
-    socket.startGame(songs);
+  const handleStart = () => {
+    socket.startGame();
   };
 
   // Finished
-  if (socket.finished) {
+  if (room.phase === "finished") {
     return (
       <ResultScreen
-        players={socket.finished}
+        players={room.players}
         mySocketId={socket.socket?.id}
         isHost={isHost}
         onBackToLobby={socket.backToLobby}
@@ -129,11 +126,14 @@ export function RoomScreen({ roomCode, navigate, socket, isHost, musicKit }: Pro
 
   // Playing or Paused
   if ((room.phase === "playing" || room.phase === "paused") && socket.round) {
+    const reveal = socket.round.revealedSong
+      ? { song: socket.round.revealedSong, winners: socket.round.winners }
+      : null;
     return (
       <GameScreen
         room={room}
         round={socket.round}
-        reveal={socket.reveal}
+        reveal={reveal}
         playSongEvent={socket.playSong}
         scoredPlayers={socket.scoredPlayers}
         isHost={isHost}
@@ -148,7 +148,7 @@ export function RoomScreen({ roomCode, navigate, socket, isHost, musicKit }: Pro
         wrongAnswer={socket.wrongAnswer}
         answerPending={socket.answerPending}
         musicKit={musicKit}
-        songs={socket.songs}
+        songs={socket.lobbySongs}
       />
     );
   }
