@@ -53,7 +53,7 @@ const server = serve({
           return Response.json({ error: "Credentials not configured. Set APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY in .env" }, { status: 401 });
         }
         try {
-          const { token, expiresAt } = await generateToken(60 * 10);
+          const { token, expiresAt } = await generateToken(60 * 60 * 24);
           return Response.json({ token, expiresAt: expiresAt.toISOString() });
         } catch (e) {
           const message = e instanceof Error ? e.message : "Token generation failed";
