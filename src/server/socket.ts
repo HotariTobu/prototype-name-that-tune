@@ -1,7 +1,7 @@
 import type { Server, Socket } from "socket.io";
 import type { ClientToServerEvents, ServerToClientEvents } from "../shared/types.ts";
 import { createRoom, joinRoom, leaveRoom, getRoom, getRoomBySocket, updateSettings, isHost, setNickname, setHandicap, saveGameParticipants, isGameParticipant, getSessionId, setSessionId, setDeletionCallback } from "./rooms.ts";
-import { startGame, submitAnswer, extendDuration, canAdvanceRound, startRound, getSongForRound, endGame, resetToLobby, getRoomSongs, setLobbySongs, getLobbySongs, shuffleAndSetRoomSongs, addPendingAnswer, cancelPendingAnswer, cancelAllPendingAnswers, cleanupRoom } from "./game.ts";
+import { startGame, submitAnswer, extendDuration, canAdvanceRound, startRound, getSongForRound, endGame, resetToLobby, getRoomSongs, setLobbySongs, getLobbySongs, shuffleAndSetRoomSongs, addPendingAnswer, cancelPendingAnswer, cancelAllPendingAnswers, cleanupRoom, checkPenalty, recordWrongAnswer } from "./game.ts";
 
 type IO = Server<ClientToServerEvents, ServerToClientEvents>;
 type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -166,6 +166,17 @@ export function registerHandlers(io: IO) {
       const player = room.players.find((p) => p.id === socket.id);
       if (!player) return;
 
+      // Check penalty before scheduling handicap timer
+      const penalty = checkPenalty(room.code, socket.id, room.settings);
+      if (penalty) {
+        if (penalty.reason === "locked-out") {
+          socket.emit("game:wrong-answer", { songTitle, lockedUntil: penalty.lockedUntil, attemptsRemaining: null });
+        } else {
+          socket.emit("game:wrong-answer", { songTitle, lockedUntil: null, attemptsRemaining: 0 });
+        }
+        return;
+      }
+
       const roundNumber = room.round.roundNumber;
       const delayMs = player.handicapSeconds * 1000;
 
@@ -173,6 +184,17 @@ export function registerHandlers(io: IO) {
         cancelPendingAnswer(room.code, socket.id);
         const currentRoom = getRoomBySocket(socket.id);
         if (!currentRoom || !currentRoom.round || currentRoom.round.roundNumber !== roundNumber) return;
+
+        // Re-check penalty (may have been applied during handicap wait)
+        const penaltyAfterWait = checkPenalty(currentRoom.code, socket.id, currentRoom.settings);
+        if (penaltyAfterWait) {
+          if (penaltyAfterWait.reason === "locked-out") {
+            socket.emit("game:wrong-answer", { songTitle, lockedUntil: penaltyAfterWait.lockedUntil, attemptsRemaining: null });
+          } else {
+            socket.emit("game:wrong-answer", { songTitle, lockedUntil: null, attemptsRemaining: 0 });
+          }
+          return;
+        }
 
         const result = submitAnswer(currentRoom, socket.id, songId, songTitle);
         if (result.correct) {
@@ -195,7 +217,12 @@ export function registerHandlers(io: IO) {
             });
           }
         } else if (result.reason === "wrong") {
-          socket.emit("game:wrong-answer", { songTitle });
+          const penaltyResult = recordWrongAnswer(currentRoom.code, socket.id, currentRoom.settings);
+          socket.emit("game:wrong-answer", {
+            songTitle,
+            lockedUntil: penaltyResult.lockedUntil,
+            attemptsRemaining: penaltyResult.attemptsRemaining,
+          });
         }
       }, delayMs);
 

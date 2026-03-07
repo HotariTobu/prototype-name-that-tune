@@ -28,12 +28,14 @@ interface Props {
   songs: Song[];
   wrongAnswer: string | null;
   answerPending: { songTitle: string; submittedAt: number } | null;
+  lockoutUntil: number | null;
+  attemptsRemaining: number | null;
 }
 
 export function GameScreen({
   room, round, reveal, playSongEvent, scoredPlayers, isHost, mySocketId,
   onPlay, onAnswer, onExtend, onCloseAnswers, onNext, onEnd, onLeave,
-  musicKit, songs, wrongAnswer, answerPending,
+  musicKit, songs, wrongAnswer, answerPending, lockoutUntil, attemptsRemaining,
 }: Props) {
   const [pendingCountdown, setPendingCountdown] = useState<number | null>(null);
 
@@ -183,6 +185,9 @@ export function GameScreen({
           wrongAnswer={wrongAnswer}
           reveal={reveal}
           onAnswer={onAnswer}
+          lockoutUntil={lockoutUntil}
+          attemptsRemaining={attemptsRemaining}
+          penaltyMaxAttempts={room.settings.penaltyMaxAttempts}
         />
       )}
 
@@ -217,7 +222,8 @@ export function GameScreen({
 
 function SearchSection({
   songs, fuse, scoredPlayers, myScore, answerPending, pendingCountdown,
-  myHandicap, wrongAnswer, reveal, onAnswer,
+  myHandicap, wrongAnswer, reveal, onAnswer, lockoutUntil, attemptsRemaining,
+  penaltyMaxAttempts,
 }: {
   songs: Song[];
   fuse: Fuse<Song>;
@@ -229,9 +235,32 @@ function SearchSection({
   wrongAnswer: string | null;
   reveal: { song: Song; winners: RoundWinner[] } | null;
   onAnswer: (songId: string, songTitle: string) => void;
+  lockoutUntil: number | null;
+  attemptsRemaining: number | null;
+  penaltyMaxAttempts: number;
 }) {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<Song[]>([]);
+  const [lockoutCountdown, setLockoutCountdown] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!lockoutUntil || lockoutUntil <= Date.now()) {
+      setLockoutCountdown(null);
+      return;
+    }
+    const update = () => {
+      const remaining = Math.max(0, (lockoutUntil - Date.now()) / 1000);
+      setLockoutCountdown(remaining > 0 ? remaining : null);
+      if (remaining <= 0) clearInterval(interval);
+    };
+    update();
+    const interval = setInterval(update, 100);
+    return () => clearInterval(interval);
+  }, [lockoutUntil]);
+
+  const isLockedOut = lockoutCountdown !== null && lockoutCountdown > 0;
+  const noAttemptsLeft = attemptsRemaining === 0;
+  const inputDisabled = isLockedOut || noAttemptsLeft;
 
   const handleSearch = (term: string) => {
     setQuery(term);
@@ -243,7 +272,7 @@ function SearchSection({
   };
 
   const handleSelect = (song: Song) => {
-    if (reveal) return;
+    if (reveal || inputDisabled) return;
     onAnswer(song.id, song.title);
     setSuggestions([]);
     setQuery("");
@@ -279,18 +308,37 @@ function SearchSection({
               </div>
             </div>
           )}
-          {wrongAnswer && (
+          {isLockedOut && (
+            <div className="bg-red-50 border border-red-300 rounded p-3 text-center">
+              <p className="text-red-700 text-sm font-bold">
+                Locked out for {lockoutCountdown!.toFixed(1)}s
+                {attemptsRemaining !== null && ` (${attemptsRemaining} attempt${attemptsRemaining !== 1 ? "s" : ""} left)`}
+              </p>
+            </div>
+          )}
+          {noAttemptsLeft && !isLockedOut && (
+            <div className="bg-red-50 border border-red-300 rounded p-3 text-center">
+              <p className="text-red-700 text-sm font-bold">No attempts remaining this round</p>
+            </div>
+          )}
+          {wrongAnswer && !isLockedOut && (
             <p className="text-center text-red-500 font-bold">
               Wrong: {wrongAnswer}
             </p>
           )}
+          {penaltyMaxAttempts > 0 && attemptsRemaining !== null && attemptsRemaining > 0 && !isLockedOut && (
+            <p className="text-center text-gray-500 text-xs">
+              Attempts: {attemptsRemaining}/{penaltyMaxAttempts}
+            </p>
+          )}
           <input
             type="text"
-            placeholder="Type the song title..."
+            placeholder={inputDisabled ? "Locked out..." : "Type the song title..."}
             value={query}
             onChange={(e) => handleSearch(e.target.value)}
-            className="border p-2 rounded w-full"
+            className={`border p-2 rounded w-full ${inputDisabled ? "opacity-50 bg-gray-100" : ""}`}
             autoFocus
+            disabled={inputDisabled}
           />
           {suggestions.length > 0 && (
             <ul className="border rounded max-h-60 overflow-y-auto">

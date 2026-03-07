@@ -1,4 +1,4 @@
-import type { RoomState, Song, RoundState } from "../shared/types.ts";
+import type { RoomState, RoomSettings, Song, RoundState } from "../shared/types.ts";
 
 let roomSongs = new Map<string, Song[]>();
 let lobbySongs = new Map<string, Song[]>();
@@ -13,6 +13,53 @@ interface PendingAnswer {
 }
 
 const pendingAnswers = new Map<string, Map<string, PendingAnswer>>();
+
+// Penalty state: Map<roomCode, Map<socketId, { wrongCount, lockedUntil }>>
+const penaltyState = new Map<string, Map<string, { wrongCount: number; lockedUntil: number }>>();
+
+export function checkPenalty(
+  roomCode: string,
+  socketId: string,
+  settings: RoomSettings
+): null | { reason: "locked-out"; lockedUntil: number } | { reason: "no-attempts-left" } {
+  const roomPenalty = penaltyState.get(roomCode);
+  const state = roomPenalty?.get(socketId);
+
+  if (settings.penaltyMaxAttempts > 0 && state && state.wrongCount >= settings.penaltyMaxAttempts) {
+    return { reason: "no-attempts-left" };
+  }
+  if (settings.penaltyLockoutSeconds > 0 && state && state.lockedUntil > Date.now()) {
+    return { reason: "locked-out", lockedUntil: state.lockedUntil };
+  }
+  return null;
+}
+
+export function recordWrongAnswer(
+  roomCode: string,
+  socketId: string,
+  settings: RoomSettings
+): { lockedUntil: number | null; attemptsRemaining: number | null } {
+  if (!penaltyState.has(roomCode)) {
+    penaltyState.set(roomCode, new Map());
+  }
+  const roomPenalty = penaltyState.get(roomCode)!;
+  const current = roomPenalty.get(socketId) ?? { wrongCount: 0, lockedUntil: 0 };
+
+  current.wrongCount += 1;
+  if (settings.penaltyLockoutSeconds > 0) {
+    current.lockedUntil = Date.now() + settings.penaltyLockoutSeconds * 1000;
+  }
+  roomPenalty.set(socketId, current);
+
+  return {
+    lockedUntil: settings.penaltyLockoutSeconds > 0 ? current.lockedUntil : null,
+    attemptsRemaining: settings.penaltyMaxAttempts > 0 ? Math.max(0, settings.penaltyMaxAttempts - current.wrongCount) : null,
+  };
+}
+
+export function resetRoundPenalties(roomCode: string): void {
+  penaltyState.delete(roomCode);
+}
 
 export function addPendingAnswer(roomCode: string, socketId: string, pending: PendingAnswer): void {
   cancelPendingAnswer(roomCode, socketId);
@@ -69,6 +116,7 @@ export function startGame(room: RoomState): RoundState {
 
 export function startRound(room: RoomState, roundNumber: number): RoundState {
   cancelAllPendingAnswers(room.code);
+  resetRoundPenalties(room.code);
   const round: RoundState = {
     roundNumber,
     currentStepIndex: 0,
@@ -145,12 +193,14 @@ export function canAdvanceRound(room: RoomState): boolean {
 export function endGame(room: RoomState): void {
   room.phase = "finished";
   cancelAllPendingAnswers(room.code);
+  resetRoundPenalties(room.code);
   roomSongs.delete(room.code);
   // Keep lobbySongs so back-to-lobby can re-shuffle
 }
 
 export function cleanupRoom(roomCode: string): void {
   cancelAllPendingAnswers(roomCode);
+  resetRoundPenalties(roomCode);
   roomSongs.delete(roomCode);
   lobbySongs.delete(roomCode);
 }
@@ -160,6 +210,7 @@ export function resetToLobby(room: RoomState): void {
   room.round = null;
   room.players.forEach((p) => (p.score = 0));
   cancelAllPendingAnswers(room.code);
+  resetRoundPenalties(room.code);
   // Re-shuffle songs for next game, keep lobbySongs intact
   shuffleAndSetRoomSongs(room.code);
 }

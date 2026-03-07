@@ -33,6 +33,8 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
   const [durationStepsInput, setDurationStepsInput] = useState(room.settings.durationSteps.join(", "));
   const [scoringInput, setScoringInput] = useState(room.settings.scoringScheme.join(", "));
   const [handicap, setHandicap] = useState(myPlayer?.handicapSeconds ?? 0);
+  const [penaltyLockout, setPenaltyLockout] = useState(room.settings.penaltyLockoutSeconds ?? 5);
+  const [penaltyMaxAttempts, setPenaltyMaxAttempts] = useState(room.settings.penaltyMaxAttempts ?? 3);
 
   // Playlist dialog state
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -150,6 +152,8 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
       totalRounds: unlimited ? 0 : Math.min(rounds, lobbySongs.length),
       durationSteps: steps,
       scoringScheme: scoring,
+      penaltyLockoutSeconds: penaltyLockout,
+      penaltyMaxAttempts: penaltyMaxAttempts,
     });
     onStart();
   };
@@ -327,6 +331,30 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
                 />
               </label>
             )}
+            <label className="block font-bold">
+              Wrong answer lockout (seconds, 0 = off): {penaltyLockout}
+              <input
+                type="range"
+                min={0}
+                max={30}
+                step={1}
+                value={penaltyLockout}
+                onChange={(e) => setPenaltyLockout(Number(e.target.value))}
+                className="w-full"
+              />
+            </label>
+            <label className="block font-bold">
+              Max attempts per round (0 = unlimited): {penaltyMaxAttempts}
+              <input
+                type="range"
+                min={0}
+                max={10}
+                step={1}
+                value={penaltyMaxAttempts}
+                onChange={(e) => setPenaltyMaxAttempts(Number(e.target.value))}
+                className="w-full"
+              />
+            </label>
           </div>
 
           <button

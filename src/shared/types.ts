@@ -22,6 +22,8 @@ export interface RoomSettings {
   scoringScheme: number[];
   playlistId: string;
   playlistName: string;
+  penaltyLockoutSeconds: number; // 0 = no lockout
+  penaltyMaxAttempts: number;    // 0 = unlimited
 }
 
 export interface RoundWinner {
@@ -75,7 +77,7 @@ export interface ServerToClientEvents {
   "game:finished": (data: { players: Player[] }) => void;
   "game:extended": (data: { currentStepIndex: number }) => void;
   "game:play-song": (data: { songIndex: number; duration: number }) => void;
-  "game:wrong-answer": (data: { songTitle: string }) => void;
+  "game:wrong-answer": (data: { songTitle: string; lockedUntil: number | null; attemptsRemaining: number | null }) => void;
   "lobby:songs": (data: { songs: Song[] }) => void;
   "game:songs": (data: { songs: Song[] }) => void;
 }

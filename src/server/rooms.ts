@@ -60,6 +60,8 @@ const DEFAULT_SETTINGS: RoomSettings = {
   scoringScheme: [4, 2, 1],
   playlistId: "",
   playlistName: "",
+  penaltyLockoutSeconds: 5,
+  penaltyMaxAttempts: 3,
 };
 
 function getSavedNickname(code: string, sessionId: string): string {
