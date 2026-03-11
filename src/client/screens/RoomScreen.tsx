@@ -147,6 +147,8 @@ export function RoomScreen({ roomCode, navigate, socket, isHost, musicKit }: Pro
         onLeave={() => navigate("/")}
         wrongAnswer={socket.wrongAnswer}
         answerPending={socket.answerPending}
+        lockoutUntil={socket.lockoutUntil}
+        attemptsRemaining={socket.attemptsRemaining}
         musicKit={musicKit}
         songs={socket.lobbySongs}
       />

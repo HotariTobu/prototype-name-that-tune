@@ -23,6 +23,8 @@ export function useSocket(callbacks?: SocketCallbacks) {
   const [wrongAnswer, setWrongAnswer] = useState<string | null>(null);
   const [lobbySongs, setLobbySongs] = useState<Song[]>([]);
   const [answerPending, setAnswerPending] = useState<{ songTitle: string; submittedAt: number } | null>(null);
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+  const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,6 +48,8 @@ export function useSocket(callbacks?: SocketCallbacks) {
         setWrongAnswer(null);
         setAnswerPending(null);
         setScoredPlayers([]);
+        setLockoutUntil(null);
+        setAttemptsRemaining(null);
       });
       socket.on("room:state", (state) => {
         setRoomState(state);
@@ -67,6 +71,8 @@ export function useSocket(callbacks?: SocketCallbacks) {
         setWrongAnswer(null);
         setAnswerPending(null);
         setScoredPlayers([]);
+        setLockoutUntil(null);
+        setAttemptsRemaining(null);
         callbacksRef.current?.onGameRound?.(r);
       });
       socket.on("game:scored", (data) => {
@@ -92,6 +98,8 @@ export function useSocket(callbacks?: SocketCallbacks) {
         if (wrongAnswerTimer) clearTimeout(wrongAnswerTimer);
         setWrongAnswer(data.songTitle);
         setAnswerPending(null);
+        if (data.lockedUntil !== null) setLockoutUntil(data.lockedUntil);
+        if (data.attemptsRemaining !== null) setAttemptsRemaining(data.attemptsRemaining);
         wrongAnswerTimer = setTimeout(() => setWrongAnswer(null), 2000);
       });
       socket.on("game:finished", () => {
@@ -132,6 +140,8 @@ export function useSocket(callbacks?: SocketCallbacks) {
     setWrongAnswer(null);
     setAnswerPending(null);
     setScoredPlayers([]);
+    setLockoutUntil(null);
+    setAttemptsRemaining(null);
   }, []);
 
   const setNickname = useCallback((nickname: string): Promise<{ ok: true } | { ok: false; error: string }> => {
@@ -163,12 +173,15 @@ export function useSocket(callbacks?: SocketCallbacks) {
   }, []);
 
   const answer = useCallback((songId: string, songTitle: string) => {
+    // Client-side guard: don't send if locked out or no attempts left
+    if (lockoutUntil !== null && lockoutUntil > Date.now()) return;
+    if (attemptsRemaining === 0) return;
     socketRef.current?.emit("game:answer", { songId, songTitle });
     const myPlayer = roomState?.players.find((p) => p.id === socketRef.current?.id);
     if (myPlayer && myPlayer.handicapSeconds > 0) {
       setAnswerPending({ songTitle, submittedAt: Date.now() });
     }
-  }, [roomState]);
+  }, [roomState, lockoutUntil, attemptsRemaining]);
 
   const extend = useCallback(() => {
     socketRef.current?.emit("game:extend");
@@ -216,5 +229,7 @@ export function useSocket(callbacks?: SocketCallbacks) {
     backToLobby,
     answerPending,
     scoredPlayers,
+    lockoutUntil,
+    attemptsRemaining,
   };
 }
