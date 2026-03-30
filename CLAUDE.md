@@ -4,7 +4,7 @@ See @README.md for project overview and game rules.
 
 ## Principles
 
-- **Prototype-first** — Prioritize getting things working quickly over polish or robustness
+- **Prototype-first** — Prioritize getting things working quickly over polish or robustness. Strict perfection is not required, but always strive for the best approach. Implementation shortcuts are acceptable, but laziness is not. UX must always remain high quality
 - **Bun-native** — Use Bun's built-in bundler, dev server, and HMR. Do not add Vite, webpack, or any other bundler
 - **Single process** — Everything runs in one Bun.serve() process: Socket.IO, static file serving
 - **Stateless server** — All state lives in memory. No database, no persistence

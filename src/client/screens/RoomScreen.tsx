@@ -32,6 +32,8 @@ interface Props {
     wrongAnswer: string | null;
     lobbySongs: Song[];
     answerPending: { songTitle: string; submittedAt: number } | null;
+    lockoutUntil: number | null;
+    attemptsRemaining: number | null;
   };
   isHost: boolean;
   musicKit: any;
