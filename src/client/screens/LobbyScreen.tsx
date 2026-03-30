@@ -125,6 +125,10 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
     musicKit.searchPlaylists(term).then(setPlaylists);
   }, 500);
 
+  const debouncedUrlLoad = useDebouncedCallback((url: string) => {
+    handleUrlLoad(url);
+  }, 500);
+
   const handlePlaylistSearchChange = (value: string) => {
     setPlaylistSearch(value);
     const trimmed = value.trim();
@@ -134,7 +138,7 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
       return;
     }
     if (extractPlaylistId(value)) {
-      handleUrlLoad(value);
+      debouncedUrlLoad(value);
       return;
     }
     if (effectiveSource === "library") {
