@@ -44,7 +44,7 @@ export function useRoomSettings(
 
   const setRounds = (value: number) => {
     setRoundsRaw(value);
-    debouncedSync({ totalRounds: Math.min(value, songCount) });
+    debouncedSync({ totalRounds: value });
   };
 
   const setPenaltyLockout = (value: number) => {
@@ -62,7 +62,7 @@ export function useRoomSettings(
     setDurationStepsInput,
     scoringInput,
     setScoringInput,
-    rounds: Math.min(rounds, Math.max(songCount, 1)),
+    rounds: Math.min(rounds, songCount),
     setRounds,
     penaltyLockout,
     setPenaltyLockout,

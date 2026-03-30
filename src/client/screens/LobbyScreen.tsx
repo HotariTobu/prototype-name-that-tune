@@ -68,7 +68,7 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
       ? await musicKit.getLibraryPlaylistSongs(playlist.id)
       : await musicKit.getPlaylistSongs(playlist.id);
     setLoadingSongs(false);
-    onUpdateSettings({ playlistId: playlist.id, playlistName: playlist.name });
+    onUpdateSettings({ playlistId: playlist.id, playlistName: playlist.name, totalRounds: fetchedSongs.length });
     onSendLobbySongs(fetchedSongs);
     settings.setRounds(fetchedSongs.length);
     setPlaylistSearch("");
@@ -109,7 +109,7 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
         setLoadingSongs(false);
         return;
       }
-      onUpdateSettings({ playlistId, playlistName: `Playlist (${playlistId})` });
+      onUpdateSettings({ playlistId, playlistName: `Playlist (${playlistId})`, totalRounds: fetchedSongs.length });
       onSendLobbySongs(fetchedSongs);
       settings.setRounds(fetchedSongs.length);
       setPlaylistSearch("");
@@ -384,11 +384,9 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
           <div className="space-y-2">
             <p className="text-sm">Duration steps: <span className="font-mono">{room.settings.durationSteps.join(", ")}s</span></p>
             <p className="text-sm">Scoring: <span className="font-mono">{room.settings.scoringScheme.join(", ")}</span></p>
-            {room.settings.totalRounds > 0 && (
-              <p className="text-sm">Rounds: <span className="font-mono">{room.settings.totalRounds}</span></p>
-            )}
-            <p className="text-sm">Wrong answer lockout: <span className="font-mono">{room.settings.penaltyLockoutSeconds > 0 ? `${room.settings.penaltyLockoutSeconds}s` : "off"}</span></p>
-            <p className="text-sm">Max attempts: <span className="font-mono">{room.settings.penaltyMaxAttempts > 0 ? room.settings.penaltyMaxAttempts : "unlimited"}</span></p>
+            <p className="text-sm">Rounds: <span className="font-mono">{room.settings.totalRounds}</span></p>
+            <p className="text-sm">Wrong answer lockout: <span className="font-mono">{room.settings.penaltyLockoutSeconds}s</span></p>
+            <p className="text-sm">Max attempts: <span className="font-mono">{room.settings.penaltyMaxAttempts}</span></p>
           </div>
         )}
 
