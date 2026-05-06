@@ -58,8 +58,7 @@ const DEFAULT_SETTINGS: RoomSettings = {
   totalRounds: 0,
   durationSteps: [1, 2, 4, 8, 16],
   scoringScheme: [4, 2, 1],
-  playlistId: "",
-  playlistName: "",
+  playlists: [],
   penaltyLockoutSeconds: 5,
   penaltyMaxAttempts: 3,
 };

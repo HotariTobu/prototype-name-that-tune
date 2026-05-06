@@ -16,12 +16,16 @@ export interface Song {
 
 export type RoomPhase = "lobby" | "playing" | "paused" | "finished";
 
+export interface PlaylistRef {
+  id: string;
+  name: string;
+}
+
 export interface RoomSettings {
   totalRounds: number;
   durationSteps: number[];
   scoringScheme: number[];
-  playlistId: string;
-  playlistName: string;
+  playlists: PlaylistRef[];
   penaltyLockoutSeconds: number; // 0 = no lockout
   penaltyMaxAttempts: number;    // 0 = unlimited
 }
