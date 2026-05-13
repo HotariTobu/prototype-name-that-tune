@@ -15,6 +15,25 @@ function whenMusicKitLoaded(): Promise<typeof MusicKit> {
   });
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const MUSIC_API_INTERVAL_MS = 100;
+const QUEUE_CHUNK_SIZE = 50;
+let nextMusicApiCall = Promise.resolve();
+
+async function throttledMusicApi(mk: MusicKit.MusicKitInstance, url: string, params?: Record<string, any>) {
+  const call = nextMusicApiCall.then(async () => {
+    console.log("MusicKit API throttled call", url);
+    const response = await mk.api.music(url, params);
+    await sleep(MUSIC_API_INTERVAL_MS);
+    return response;
+  });
+  nextMusicApiCall = call.then(() => undefined, () => undefined);
+  return call;
+}
+
 const mkReady: Promise<MusicKit.MusicKitInstance> = whenMusicKitLoaded().then(async (MusicKit) => {
   const { token } = await fetchToken();
   return MusicKit.configure({
@@ -32,6 +51,8 @@ export function useMusicKit() {
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const preparePromiseRef = useRef<Promise<void>>(Promise.resolve());
   const loadPromiseRef = useRef<Promise<void>>(Promise.resolve());
+  const songsRef = useRef<Song[]>([]);
+  const queuedChunkStartRef = useRef<number | null>(null);
 
   const authorize = useCallback(async () => {
     const mk = await mkReady;
@@ -82,7 +103,7 @@ export function useMusicKit() {
     let url: string | null = `/v1/catalog/{{storefrontId}}/playlists/${playlistId}/tracks`;
     let params: Record<string, any> | undefined = { limit: 100 };
     while (url) {
-      const response = await mk.api.music(url, params);
+      const response = await throttledMusicApi(mk, url, params);
       const data = response.data as any;
       allTracks.push(...(data?.data ?? []));
       url = data?.next ?? null;
@@ -103,7 +124,7 @@ export function useMusicKit() {
     let url: string | null = "/v1/me/library/playlists";
     let params: Record<string, any> | undefined = { limit: 100 };
     while (url) {
-      const response = await mk.api.music(url, params);
+      const response = await throttledMusicApi(mk, url, params);
       const data = response.data as any;
       allPlaylists.push(...(data?.data ?? []));
       url = data?.next ?? null;
@@ -122,7 +143,7 @@ export function useMusicKit() {
     let url: string | null = `/v1/me/library/playlists/${playlistId}/tracks`;
     let params: Record<string, any> | undefined = { limit: 100, include: "catalog" };
     while (url) {
-      const response = await mk.api.music(url, params);
+      const response = await throttledMusicApi(mk, url, params);
       const data = response.data as any;
       allTracks.push(...(data?.data ?? []));
       url = data?.next ?? null;
@@ -143,14 +164,19 @@ export function useMusicKit() {
   const prepareQueue = useCallback(async (songs: Song[]) => {
     if (songs.length === 0) return;
     const mk = await mkReady;
+    songsRef.current = songs;
+    queuedChunkStartRef.current = null;
 
     setPreparing(true);
     const promise = (async () => {
       try {
         mk.shuffleMode = MusicKit.PlayerShuffleMode.off;
-        await mk.setQueue({ songs: songs.map((s) => s.id), startPlaying: false });
+        const queueSongs = songs.slice(0, QUEUE_CHUNK_SIZE);
+        console.log("MusicKit queue preparing chunk", 0, "with", queueSongs.length, "of", songs.length, "songs");
+        await mk.setQueue({ songs: queueSongs.map((s) => s.id), startPlaying: false });
+        queuedChunkStartRef.current = 0;
         mk.repeatMode = MusicKit.PlayerRepeatMode.one;
-        console.log("MusicKit queue prepared with", songs.length, "songs");
+        console.log("MusicKit queue prepared chunk", 0, "with", queueSongs.length, "songs");
       } finally {
         setPreparing(false);
       }
@@ -165,11 +191,22 @@ export function useMusicKit() {
       try {
         await preparePromiseRef.current;
         const mk = await mkReady;
-        if (mk.nowPlayingItemIndex === songIndex) return;
-        await mk.changeToMediaAtIndex(songIndex);
+        const songs = songsRef.current;
+        const chunkStart = Math.floor(songIndex / QUEUE_CHUNK_SIZE) * QUEUE_CHUNK_SIZE;
+        const queueIndex = songIndex - chunkStart;
+        if (queuedChunkStartRef.current !== chunkStart) {
+          const queueSongs = songs.slice(chunkStart, chunkStart + QUEUE_CHUNK_SIZE);
+          console.log("MusicKit queue preparing chunk", chunkStart, "with", queueSongs.length, "of", songs.length, "songs");
+          await mk.setQueue({ songs: queueSongs.map((s) => s.id), startPlaying: false });
+          queuedChunkStartRef.current = chunkStart;
+          mk.repeatMode = MusicKit.PlayerRepeatMode.one;
+          console.log("MusicKit queue prepared chunk", chunkStart, "with", queueSongs.length, "songs");
+        }
+        if (mk.nowPlayingItemIndex === queueIndex) return;
+        await mk.changeToMediaAtIndex(queueIndex);
         mk.pause();
         await mk.seekToTime(0);
-        console.log("MusicKit loaded song at index", songIndex);
+        console.log("MusicKit loaded song at index", songIndex, "queue index", queueIndex);
       } finally {
         setLoading(false);
       }
@@ -181,13 +218,14 @@ export function useMusicKit() {
     const mk = await mkReady;
 
     if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+    await loadPromiseRef.current;
     if (mk.isPlaying) mk.pause();
-    mk.play();
+    await mk.play();
     setPlaying(true);
 
     stopTimerRef.current = setTimeout(() => {
       if (mk.isPlaying) mk.pause();
-      mk.seekToTime(0);
+      void mk.seekToTime(0);
       setPlaying(false);
     }, durationSec * 1000);
   }, []);
@@ -197,7 +235,7 @@ export function useMusicKit() {
 
     await loadPromiseRef.current;
     if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
-    if (!mk.isPlaying) mk.play();
+    if (!mk.isPlaying) await mk.play();
     setPlaying(true);
   }, []);
 
@@ -205,14 +243,14 @@ export function useMusicKit() {
     if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
     const mk = await mkReady;
     if (mk.isPlaying) mk.pause();
-    mk.seekToTime(0);
+    await mk.seekToTime(0);
     setPlaying(false);
   }, []);
 
   const cleanup = useCallback(async () => {
     if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
     const mk = await mkReady;
-    mk.stop();
+    await mk.stop();
     setPlaying(false);
   }, []);
 

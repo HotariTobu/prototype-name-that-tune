@@ -79,6 +79,12 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
 
   const selectedPlaylists = room.settings.playlists;
   const selectedIds = new Set(selectedPlaylists.map((p) => p.id));
+  const selectedPlaylistsReady = selectedPlaylists.length > 0
+    && selectedPlaylists.every((p) => playlistSongsCache[p.id])
+    && selectedPlaylists.every((p) => !loadingPlaylistIds.has(p.id))
+    && selectedPlaylists.every((p) => !errorPlaylistIds[p.id]);
+  const selectedPlaylistSongs = combineSelectedSongs(selectedPlaylists, playlistSongsCache);
+  const canStartGame = selectedPlaylistsReady && selectedPlaylistSongs.length > 0;
 
   // Re-send combined songs whenever selection or cache changes (after the first mount).
   // Skip if any selected playlist hasn't been fetched yet — wait until cache catches up,
@@ -250,7 +256,8 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
   };
 
   const handleStart = () => {
-    if (lobbySongs.length === 0) return;
+    if (!canStartGame) return;
+    onSendLobbySongs(selectedPlaylistSongs);
     onStart();
   };
 
@@ -564,10 +571,10 @@ export function LobbyScreen({ room, isHost, mySocketId, onSetNickname, onSetHand
 
             <button
               onClick={handleStart}
-              disabled={lobbySongs.length === 0}
+              disabled={!canStartGame}
               className="bg-green-600 text-white px-6 py-3 rounded w-full text-lg font-bold disabled:opacity-50"
             >
-              Start Game
+              {selectedPlaylists.length > 0 && !canStartGame ? "Loading all selected songs..." : "Start Game"}
             </button>
           </div>
         ) : (
